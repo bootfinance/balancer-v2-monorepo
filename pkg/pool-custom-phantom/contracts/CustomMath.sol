@@ -54,7 +54,7 @@ library CustomMath {
     // The amplification parameter equals: A n^(n-1)
     // See: https://github.com/curvefi/curve-contract/blob/b0bbf77f8f93c9c5f4e415bce9cd71f0cdee960e/contracts/pool-templates/base/SwapTemplateBase.vy#L206
     // solhint-disable-previous-line max-line-length
-    function _calculateInvariant(uint256 amplificationParameter, uint256[] memory balances)
+    function _calculateInvariant(uint256 amplificationParameter, uint256 amplificationParameter2, uint256[] memory balances)
         internal
         pure
         returns (uint256)
@@ -124,7 +124,8 @@ library CustomMath {
     // Computes how many tokens can be taken out of a pool if `tokenAmountIn` are sent, given the current balances.
     // The amplification parameter equals: A n^(n-1)
     function _calcOutGivenIn(
-        uint256 amplificationParameter,
+        uint256 amplificationParameter1,
+        uint256 amplificationParameter2,
         uint256[] memory balances,
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
@@ -147,7 +148,8 @@ library CustomMath {
         balances[tokenIndexIn] = balances[tokenIndexIn].add(tokenAmountIn);
 
         uint256 finalBalanceOut = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amplificationParameter,
+            amplificationParameter1,
+            amplificationParameter2,
             balances,
             invariant,
             tokenIndexOut
@@ -164,7 +166,8 @@ library CustomMath {
     // current balances, using the Newton-Raphson approximation.
     // The amplification parameter equals: A n^(n-1)
     function _calcInGivenOut(
-        uint256 amplificationParameter,
+        uint256 amplificationParameter1,
+        uint256 amplificationParameter2,
         uint256[] memory balances,
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
@@ -187,7 +190,8 @@ library CustomMath {
         balances[tokenIndexOut] = balances[tokenIndexOut].sub(tokenAmountOut);
 
         uint256 finalBalanceIn = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amplificationParameter,
+            amplificationParameter1,
+            amplificationParameter2,
             balances,
             invariant,
             tokenIndexIn
@@ -201,7 +205,8 @@ library CustomMath {
     }
 
     function _calcBptOutGivenExactTokensIn(
-        uint256 amp,
+        uint256 amp1,
+        uint256 amp2,
         uint256[] memory balances,
         uint256[] memory amountsIn,
         uint256 bptTotalSupply,
@@ -245,7 +250,7 @@ library CustomMath {
             newBalances[i] = balances[i].add(amountInWithoutFee);
         }
 
-        uint256 newInvariant = _calculateInvariant(amp, newBalances);
+        uint256 newInvariant = _calculateInvariant(amp1, amp2, newBalances);
         uint256 invariantRatio = newInvariant.divDown(currentInvariant);
 
         // If the invariant didn't increase for any reason, we simply don't mint BPT
@@ -257,7 +262,8 @@ library CustomMath {
     }
 
     function _calcTokenInGivenExactBptOut(
-        uint256 amp,
+        uint256 amp1,
+        uint256 amp2,
         uint256[] memory balances,
         uint256 tokenIndex,
         uint256 bptAmountOut,
@@ -271,7 +277,8 @@ library CustomMath {
 
         // Calculate amount in without fee.
         uint256 newBalanceTokenIndex = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amp,
+            amp1,
+            amp2,
             balances,
             newInvariant,
             tokenIndex
@@ -302,7 +309,8 @@ library CustomMath {
     amountOutPercentageExcess -> amountOutBeforeFee -> newInvariant -> amountBPTIn
     */
     function _calcBptInGivenExactTokensOut(
-        uint256 amp,
+        uint256 amp1,
+        uint256 amp2,
         uint256[] memory balances,
         uint256[] memory amountsOut,
         uint256 bptTotalSupply,
@@ -346,7 +354,7 @@ library CustomMath {
             newBalances[i] = balances[i].sub(amountOutWithFee);
         }
 
-        uint256 newInvariant = _calculateInvariant(amp, newBalances);
+        uint256 newInvariant = _calculateInvariant(amp1, amp2, newBalances);
         uint256 invariantRatio = newInvariant.divDown(currentInvariant);
 
         // return amountBPTIn
@@ -354,7 +362,8 @@ library CustomMath {
     }
 
     function _calcTokenOutGivenExactBptIn(
-        uint256 amp,
+        uint256 amp1,
+        uint256 amp2,
         uint256[] memory balances,
         uint256 tokenIndex,
         uint256 bptAmountIn,
@@ -368,7 +377,8 @@ library CustomMath {
 
         // Calculate amount out without fee
         uint256 newBalanceTokenIndex = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amp,
+            amp1,
+            amp2,
             balances,
             newInvariant,
             tokenIndex
@@ -399,14 +409,15 @@ library CustomMath {
     // This function calculates the balance of a given token (tokenIndex)
     // given all the other balances and the invariant
     function _getTokenBalanceGivenInvariantAndAllOtherBalances(
-        uint256 amplificationParameter,
+        uint256 amplificationParameter1,
+        uint256 amplificationParameter2,
         uint256[] memory balances,
         uint256 invariant,
         uint256 tokenIndex
     ) internal pure returns (uint256) {
         // Rounds result up overall
 
-        uint256 ampTimesTotal = amplificationParameter * balances.length;
+        uint256 ampTimesTotal = amplificationParameter1 * balances.length;
         uint256 sum = balances[0];
         uint256 P_D = balances[0] * balances.length;
         for (uint256 j = 1; j < balances.length; j++) {
@@ -453,12 +464,13 @@ library CustomMath {
 
     function _getRate(
         uint256[] memory balances,
-        uint256 amp,
+        uint256 amp1,
+        uint256 amp2,
         uint256 supply
     ) internal pure returns (uint256) {
         // When calculating the current BPT rate, we may not have paid the protocol fees, therefore
         // the invariant should be smaller than its current value. Then, we round down overall.
-        uint256 invariant = _calculateInvariant(amp, balances);
+        uint256 invariant = _calculateInvariant(amp1, amp2, balances);
         return invariant.divDown(supply);
     }
 }

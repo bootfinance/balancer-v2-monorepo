@@ -25,9 +25,10 @@ contract MockCustomPoolAmplification is CustomPoolAmplification {
     constructor(
         IVault vault,
         address owner,
-        uint256 amplificationParameter
+        uint256 amplificationParameter1,
+        uint256 amplificationParameter2
     )
-        CustomPoolAmplification(amplificationParameter)
+        CustomPoolAmplification(amplificationParameter1, amplificationParameter2)
         BasePoolAuthorization(owner)
         Authentication(bytes32(uint256(address(this))))
     {
