@@ -17,23 +17,23 @@ pragma experimental ABIEncoderV2;
 
 import "@balancer-labs/v2-pool-utils/contracts/test/MockFailureModes.sol";
 
-import "../CustomPhantomPool.sol";
+import "../ComposableCustomPool.sol";
 
-contract MockCustomPhantomPool is CustomPhantomPool, MockFailureModes {
-    constructor(NewPoolParams memory params) CustomPhantomPool(params) {
+contract MockComposableCustomPool is ComposableCustomPool, MockFailureModes {
+    constructor(NewPoolParams memory params) ComposableCustomPool(params) {
         // solhint-disable-previous-line no-empty-blocks
     }
 
-    function mockCacheTokenRateIfNecessary(IERC20 token) external {
-        _cacheTokenRateIfNecessary(token);
+    function mockCacheTokenRateIfNecessary(uint256 index) external {
+        _cacheTokenRateIfNecessary(index);
     }
 
     function _updateTokenRateCache(
-        IERC20 token,
+        uint256 index,
         IRateProvider provider,
         uint256 duration
     ) internal override whenNotInFailureMode(FailureMode.PRICE_RATE) {
-        return super._updateTokenRateCache(token, provider, duration);
+        return super._updateTokenRateCache(index, provider, duration);
     }
 
     function _onSwapGivenIn(
@@ -52,5 +52,12 @@ contract MockCustomPhantomPool is CustomPhantomPool, MockFailureModes {
         uint256 indexOut
     ) internal virtual override whenNotInFailureMode(FailureMode.INVARIANT) returns (uint256 amountIn) {
         return super._onSwapGivenOut(request, balancesIncludingBpt, indexIn, indexOut);
+    }
+
+    function beforeJoinExit(uint256[] memory registeredBalances)
+        external
+        returns (BeforeJoinExitReturn memory)
+    {
+        return _beforeJoinExit(registeredBalances);
     }
 }

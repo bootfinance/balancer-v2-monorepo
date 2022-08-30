@@ -54,7 +54,7 @@ library CustomMath {
     // The amplification parameter equals: A n^(n-1)
     // See: https://github.com/curvefi/curve-contract/blob/b0bbf77f8f93c9c5f4e415bce9cd71f0cdee960e/contracts/pool-templates/base/SwapTemplateBase.vy#L206
     // solhint-disable-previous-line max-line-length
-    function _calculateInvariant(uint256 amplificationParameter, uint256 amplificationParameter2, uint256[] memory balances)
+    function _calculateInvariant(uint256 amplificationParameter1, uint256 amplificationParameter2, uint256[] memory balances)
         internal
         pure
         returns (uint256)
@@ -81,7 +81,7 @@ library CustomMath {
 
         uint256 prevInvariant; // Dprev in the Curve version
         uint256 invariant = sum; // D in the Curve version
-        uint256 ampTimesTotal = amplificationParameter * numTokens; // Ann in the Curve version
+        uint256 ampTimesTotal = amplificationParameter1 * numTokens; // Ann in the Curve version
 
         for (uint256 i = 0; i < 255; i++) {
             uint256 D_P = invariant;
@@ -115,10 +115,9 @@ library CustomMath {
                 return invariant;
             }
         }
-
-        // TODO: add STABLE pool errors to Balancer errors?
+        // TODO: Add new error code to Errors
+        // _revert(Errors.CUSTOM_INVARIANT_DIDNT_CONVERGE);
         _revert(Errors.STABLE_INVARIANT_DIDNT_CONVERGE);
-        return 0;
     }
 
     // Computes how many tokens can be taken out of a pool if `tokenAmountIn` are sent, given the current balances.
@@ -457,9 +456,10 @@ library CustomMath {
                 return tokenBalance;
             }
         }
-        // TODO: add STABLE pool errors to Balancer errors?
+
+        // TODO: Add new error code to Errors
+        // _revert(Errors.CUSTOM_GET_BALANCE_DIDNT_CONVERGE);
         _revert(Errors.STABLE_GET_BALANCE_DIDNT_CONVERGE);
-        return 0;
     }
 
     function _getRate(

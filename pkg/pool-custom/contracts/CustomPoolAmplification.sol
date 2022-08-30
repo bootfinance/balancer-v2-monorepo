@@ -52,6 +52,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
 
     event Amp1UpdateStarted(uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime);
     event Amp1UpdateStopped(uint256 currentValue);
+
     event Amp2UpdateStarted(uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime);
     event Amp2UpdateStopped(uint256 currentValue);
 
@@ -63,9 +64,9 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
         _require(amplificationParameter2 <= CustomMath._MAX_AMP, Errors.MAX_AMP);
 
         uint256 initialAmp1 = Math.mul(amplificationParameter1, CustomMath._AMP_PRECISION);
-        _setAmplification1Data(initialAmp1);
-
         uint256 initialAmp2 = Math.mul(amplificationParameter2, CustomMath._AMP_PRECISION);
+
+        _setAmplification1Data(initialAmp1);
         _setAmplification2Data(initialAmp2);
     }
 
@@ -83,7 +84,6 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
 
     // Return the current amp value, which will be an interpolation if there is an ongoing amp update.
     // Also return a flag indicating whether there is an ongoing update.
-    // TODO: replace  _getAmplificationParameter1 & _getAmplificationParameter1 with one call
     function _getAmplificationParameter1() internal view returns (uint256 value, bool isUpdating) {
         (uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime) = _getAmplification1Data();
 
@@ -108,6 +108,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
             value = endValue;
         }
     }
+
     function _getAmplificationParameter2() internal view returns (uint256 value, bool isUpdating) {
         (uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime) = _getAmplification2Data();
 
@@ -134,8 +135,15 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
     }
 
     // Unpack and return all amplification-related parameters.
-    function _getAmplification1Data() private view
-        returns (uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime)
+    function _getAmplification1Data()
+        private
+        view
+        returns (
+            uint256 startValue,
+            uint256 endValue,
+            uint256 startTime,
+            uint256 endTime
+        )
     {
         startValue = _packedAmplification1Data.decodeUint(_AMP_START_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH);
         endValue = _packedAmplification1Data.decodeUint(_AMP_END_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH);
@@ -143,9 +151,15 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
         endTime = _packedAmplification1Data.decodeUint(_AMP_END_TIME_OFFSET, _AMP_TIMESTAMP_BIT_LENGTH);
     }
 
-    // Unpack and return all amplification-related parameters.
-    function _getAmplification2Data() private view
-        returns (uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime)
+    function _getAmplification2Data()
+        private
+        view
+        returns (
+            uint256 startValue,
+            uint256 endValue,
+            uint256 startTime,
+            uint256 endTime
+        )
     {
         startValue = _packedAmplification2Data.decodeUint(_AMP_START_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH);
         endValue = _packedAmplification2Data.decodeUint(_AMP_END_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH);
@@ -212,12 +226,14 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
     function stopAmplificationParameter1Update() external authenticate {
         (uint256 currentValue, bool isUpdating) = _getAmplificationParameter1();
         _require(isUpdating, Errors.AMP_NO_ONGOING_UPDATE);
+
         _setAmplification1Data(currentValue);
     }
 
     function stopAmplificationParameter2Update() external authenticate {
         (uint256 currentValue, bool isUpdating) = _getAmplificationParameter2();
         _require(isUpdating, Errors.AMP_NO_ONGOING_UPDATE);
+
         _setAmplification2Data(currentValue);
     }
 
@@ -241,15 +257,24 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
         emit Amp2UpdateStarted(startValue, endValue, startTime, endTime);
     }
 
-    function _storeAmplification1Data(uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime) private {
+    function _storeAmplification1Data(
+        uint256 startValue,
+        uint256 endValue,
+        uint256 startTime,
+        uint256 endTime
+    ) private {
         _packedAmplification1Data =
             WordCodec.encodeUint(startValue, _AMP_START_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH) |
             WordCodec.encodeUint(endValue, _AMP_END_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH) |
             WordCodec.encodeUint(startTime, _AMP_START_TIME_OFFSET, _AMP_TIMESTAMP_BIT_LENGTH) |
             WordCodec.encodeUint(endTime, _AMP_END_TIME_OFFSET, _AMP_TIMESTAMP_BIT_LENGTH);
     }
-
-    function _storeAmplification2Data(uint256 startValue, uint256 endValue, uint256 startTime, uint256 endTime) private {
+    function _storeAmplification2Data(
+        uint256 startValue,
+        uint256 endValue,
+        uint256 startTime,
+        uint256 endTime
+    ) private {
         _packedAmplification2Data =
             WordCodec.encodeUint(startValue, _AMP_START_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH) |
             WordCodec.encodeUint(endValue, _AMP_END_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH) |
@@ -265,7 +290,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
     function _isOwnerOnlyAction(bytes32 actionId) internal view virtual override returns (bool) {
         return
             (actionId == getActionId(this.startAmplificationParameter1Update.selector)) ||
-            (actionId == getActionId(this.stopAmplificationParameter1Update.selector))  ||
+            (actionId == getActionId(this.stopAmplificationParameter1Update.selector)) ||
             (actionId == getActionId(this.startAmplificationParameter2Update.selector)) ||
             (actionId == getActionId(this.stopAmplificationParameter2Update.selector));
     }

@@ -16,9 +16,9 @@ pragma solidity ^0.7.0;
 
 import "@balancer-labs/v2-solidity-utils/contracts/helpers/ERC20Helpers.sol";
 
-import "../CustomPoolRates.sol";
+import "../ComposableCustomPoolRates.sol";
 
-contract MockCustomPoolRates is CustomPoolRates {
+contract MockComposableCustomPoolRates is ComposableCustomPoolRates {
     constructor(
         IVault vault,
         IERC20[] memory tokens,
@@ -27,8 +27,8 @@ contract MockCustomPoolRates is CustomPoolRates {
         bool[] memory exemptFromYieldProtocolFeeFlags,
         address owner
     )
-        CustomPoolRates(RatesParams(tokens, tokenRateProviders, tokenRateCacheDurations))
-        CustomPoolStorage(
+        ComposableCustomPoolRates(RatesParams(tokens, tokenRateProviders, tokenRateCacheDurations))
+        ComposableCustomPoolStorage(
             StorageParams(_insertSorted(tokens, IERC20(this)), tokenRateProviders, exemptFromYieldProtocolFeeFlags)
         )
         BasePool(
@@ -52,7 +52,7 @@ contract MockCustomPoolRates is CustomPoolRates {
     }
 
     function cacheTokenRateIfNecessary(IERC20 token) external {
-        _cacheTokenRateIfNecessary(token);
+        _cacheTokenRateIfNecessary(_getTokenIndex(token));
     }
 
     function updateOldRates() external {

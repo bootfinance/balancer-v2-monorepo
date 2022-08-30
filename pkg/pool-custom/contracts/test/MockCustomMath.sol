@@ -70,7 +70,16 @@ contract MockCustomMath {
         uint256 currentInvariant,
         uint256 swapFee
     ) external pure returns (uint256) {
-        return CustomMath._calcBptOutGivenExactTokensIn(amp1, amp2, balances, amountsIn, bptTotalSupply, currentInvariant, swapFee);
+        return
+            CustomMath._calcBptOutGivenExactTokensIn(
+                amp1,
+                amp2,
+                balances,
+                amountsIn,
+                bptTotalSupply,
+                currentInvariant,
+                swapFee
+            );
     }
 
     function tokenInForExactBPTOut(
@@ -84,7 +93,16 @@ contract MockCustomMath {
         uint256 swapFee
     ) external pure returns (uint256) {
         return
-            CustomMath._calcTokenInGivenExactBptOut(amp1, amp2, balances, tokenIndex, bptAmountOut, bptTotalSupply, currentInvariant, swapFee);
+            CustomMath._calcTokenInGivenExactBptOut(
+                amp1,
+                amp2,
+                balances,
+                tokenIndex,
+                bptAmountOut,
+                bptTotalSupply,
+                currentInvariant,
+                swapFee
+            );
     }
 
     function exactBPTInForTokenOut(
@@ -97,7 +115,17 @@ contract MockCustomMath {
         uint256 currentInvariant,
         uint256 swapFee
     ) external pure returns (uint256) {
-        return CustomMath._calcTokenOutGivenExactBptIn(amp1, amp2, balances, tokenIndex, bptAmountIn, bptTotalSupply, currentInvariant, swapFee);
+        return
+            CustomMath._calcTokenOutGivenExactBptIn(
+                amp1,
+                amp2,
+                balances,
+                tokenIndex,
+                bptAmountIn,
+                bptTotalSupply,
+                currentInvariant,
+                swapFee
+            );
     }
 
     function bptInForExactTokensOut(
@@ -109,6 +137,41 @@ contract MockCustomMath {
         uint256 currentInvariant,
         uint256 swapFee
     ) external pure returns (uint256) {
-        return CustomMath._calcBptInGivenExactTokensOut(amp1, amp2, balances, amountsOut, bptTotalSupply, currentInvariant, swapFee);
+        return
+            CustomMath._calcBptInGivenExactTokensOut(
+                amp1,
+                amp2,
+                balances,
+                amountsOut,
+                bptTotalSupply,
+                currentInvariant,
+                swapFee
+            );
+    }
+
+    function getTokenBalanceGivenInvariantAndAllOtherBalances(
+        uint256 amplificationParameter1,
+        uint256 amplificationParameter2,
+        uint256[] memory balances,
+        uint256 currentInvariant,
+        uint256 tokenIndex
+    ) external pure returns (uint256) {
+        return
+            CustomMath._getTokenBalanceGivenInvariantAndAllOtherBalances(
+                amplificationParameter1,
+                amplificationParameter2,
+                balances,
+                currentInvariant,
+                tokenIndex
+            );
+    }
+
+    function getRate(
+        uint256[] memory balances,
+        uint256 amp1,
+        uint256 amp2,
+        uint256 supply
+    ) external pure returns (uint256) {
+        return CustomMath._getRate(balances, amp1, amp2, supply);
     }
 }

@@ -16,24 +16,21 @@ pragma solidity ^0.7.0;
 pragma experimental ABIEncoderV2;
 
 import "@balancer-labs/v2-interfaces/contracts/vault/IVault.sol";
-import "@balancer-labs/v2-interfaces/contracts/standalone-utils/IProtocolFeePercentagesProvider.sol";
 
-import "@balancer-labs/v2-pool-utils/contracts/factories/BasePoolSplitCodeFactory.sol";
+import "@balancer-labs/v2-pool-utils/contracts/factories/BasePoolFactory.sol";
 import "@balancer-labs/v2-pool-utils/contracts/factories/FactoryWidePauseWindow.sol";
 
-import "./CustomPhantomPool.sol";
+import "./ComposableCustomPool.sol";
 
-contract CustomPhantomPoolFactory is BasePoolSplitCodeFactory, FactoryWidePauseWindow {
-    IProtocolFeePercentagesProvider private _protocolFeeProvider;
-
+contract ComposableCustomPoolFactory is BasePoolFactory, FactoryWidePauseWindow {
     constructor(IVault vault, IProtocolFeePercentagesProvider protocolFeeProvider)
-        BasePoolSplitCodeFactory(vault, type(CustomPhantomPool).creationCode)
+        BasePoolFactory(vault, protocolFeeProvider, type(ComposableCustomPool).creationCode)
     {
-        _protocolFeeProvider = protocolFeeProvider;
+        // solhint-disable-previous-line no-empty-blocks
     }
 
     /**
-     * @dev Deploys a new `CustomPhantomPool`.
+     * @dev Deploys a new `ComposableCustomPool`.
      */
     function create(
         string memory name,
@@ -46,15 +43,15 @@ contract CustomPhantomPoolFactory is BasePoolSplitCodeFactory, FactoryWidePauseW
         bool[] memory exemptFromYieldProtocolFeeFlags,
         uint256 swapFeePercentage,
         address owner
-    ) external returns (CustomPhantomPool) {
+    ) external returns (ComposableCustomPool) {
         (uint256 pauseWindowDuration, uint256 bufferPeriodDuration) = getPauseConfiguration();
         return
-            CustomPhantomPool(
+            ComposableCustomPool(
                 _create(
                     abi.encode(
-                        CustomPhantomPool.NewPoolParams({
+                        ComposableCustomPool.NewPoolParams({
                             vault: getVault(),
-                            protocolFeeProvider: _protocolFeeProvider,
+                            protocolFeeProvider: getProtocolFeePercentagesProvider(),
                             name: name,
                             symbol: symbol,
                             tokens: tokens,

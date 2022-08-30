@@ -1,13 +1,13 @@
 {
-  "name": "@balancer-labs/v2-pool-custom-phantom",
+  "name": "@balancer-labs/v2-pool-custom",
   "version": "0.1.0",
-  "description": "Balancer V2 Custom Phantom Pools",
+  "description": "Balancer V2 Composable Custom Pools",
   "license": "GPL-3.0-only",
-  "homepage": "https://github.com/balancer-labs/balancer-v2-monorepo/tree/master/pkg/pool-custom-phantom#readme",
+  "homepage": "https://github.com/balancer-labs/balancer-v2-monorepo/tree/master/pkg/pool-custom#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/balancer-labs/balancer-v2-monorepo.git",
-    "directory": "pkg/pool-custom-phantom"
+    "directory": "pkg/pool-custom"
   },
   "bugs": {
     "url": "https://github.com/balancer-labs/balancer-v2-monorepo/issues"

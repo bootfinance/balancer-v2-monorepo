@@ -25,7 +25,7 @@ import { Account } from '@balancer-labs/v2-helpers/src/models/types/types';
 import TypesConverter from '@balancer-labs/v2-helpers/src/models/types/TypesConverter';
 import Token from '@balancer-labs/v2-helpers/src/models/tokens/Token';
 
-describe('CustomPoolRates', () => {
+describe('ComposableCustomPoolRates', () => {
   let admin: SignerWithAddress, owner: SignerWithAddress, other: SignerWithAddress;
   let vault: Vault;
   const DELEGATE_OWNER = '0xBA1BA1ba1BA1bA1bA1Ba1BA1ba1BA1bA1ba1ba1B';
@@ -44,7 +44,7 @@ describe('CustomPoolRates', () => {
     it('reverts', async () => {
       const tokens = await TokenList.create(1);
       await expect(
-        deploy('MockCustomPoolRates', {
+        deploy('MockComposableCustomPoolRates', {
           args: [
             vault.address,
             tokens.addresses,
@@ -78,7 +78,7 @@ describe('CustomPoolRates', () => {
     it('reverts', async () => {
       const tokens = await TokenList.create(6, { sorted: true });
       await expect(
-        deploy('MockCustomPoolRates', {
+        deploy('MockComposableCustomPoolRates', {
           args: [
             vault.address,
             tokens.addresses,
@@ -117,7 +117,6 @@ describe('CustomPoolRates', () => {
     });
 
     let rateProviders: string[] = [];
-    let tokenRateCacheDurations: BigNumber[] = [];
     let exemptFromYieldProtocolFeeFlags: boolean[] = [];
 
     async function deployPool(
@@ -127,7 +126,7 @@ describe('CustomPoolRates', () => {
       newExemptFromYieldProtocolFeeFlags: boolean[],
       poolOwner: Account
     ): Promise<void> {
-      pool = await deploy('MockCustomPoolRates', {
+      pool = await deploy('MockComposableCustomPoolRates', {
         args: [
           vault.address,
           tokenList.addresses,
@@ -139,7 +138,6 @@ describe('CustomPoolRates', () => {
       });
       bptIndex = (await pool.getBptIndex()).toNumber();
       rateProviders = newRateProviders;
-      tokenRateCacheDurations = newTokenRateCacheDurations;
       exemptFromYieldProtocolFeeFlags = newExemptFromYieldProtocolFeeFlags;
     }
 
@@ -184,12 +182,6 @@ describe('CustomPoolRates', () => {
       return allRateProviders;
     }
 
-    async function exemptFlagsWithBpt(): Promise<boolean[]> {
-      const allExemptFromYieldProtocolFeeFlags = exemptFromYieldProtocolFeeFlags.slice();
-      allExemptFromYieldProtocolFeeFlags.splice(bptIndex, 0, false);
-      return allExemptFromYieldProtocolFeeFlags;
-    }
-
     describe('constructor', () => {
       context('when the constructor succeeds', () => {
         sharedBeforeEach('deploy pool', async () => {
@@ -198,10 +190,11 @@ describe('CustomPoolRates', () => {
 
         it('emits TokenRateCacheUpdated events for each token with a rate provider', async () => {
           const deploymentTx = await pool.deployTransaction.wait();
-          for (const [index, token] of tokens.tokens.entries()) {
-            if (rateProviders[index] !== ZERO_ADDRESS) {
+          const allRateProviders = await rateProvidersWithBpt();
+          for (const [index, rateProvider] of allRateProviders.entries()) {
+            if (rateProvider !== ZERO_ADDRESS) {
               expectEvent.inIndirectReceipt(deploymentTx, pool.interface, 'TokenRateCacheUpdated', {
-                token: token.address,
+                tokenIndex: index,
                 rate: fp(1),
               });
             }
@@ -210,12 +203,13 @@ describe('CustomPoolRates', () => {
 
         it('emits TokenRateProviderSet events for each token with a rate provider', async () => {
           const deploymentTx = await pool.deployTransaction.wait();
-          for (const [index, token] of tokens.tokens.entries()) {
-            if (rateProviders[index] !== ZERO_ADDRESS) {
+          const allRateProviders = await rateProvidersWithBpt();
+          for (const [index, rateProvider] of allRateProviders.entries()) {
+            if (rateProvider !== ZERO_ADDRESS) {
               expectEvent.inIndirectReceipt(deploymentTx, pool.interface, 'TokenRateProviderSet', {
-                token: token.address,
-                provider: rateProviders[index],
-                cacheDuration: tokenRateCacheDurations[index],
+                tokenIndex: index,
+                provider: rateProvider,
+                cacheDuration: INITIAL_CACHE_DURATION,
               });
             }
           }
@@ -351,6 +345,7 @@ describe('CustomPoolRates', () => {
               if (allRateProviders[i] === ZERO_ADDRESS) return;
 
               const previousCache = await pool.getTokenRateCache(token.address);
+              expect(previousCache.rate).not.to.be.equal(newRate);
 
               const rateProvider = await deployedAt('v2-pool-utils/MockRateProvider', allRateProviders[i]);
               await rateProvider.mockRate(newRate);
@@ -359,7 +354,6 @@ describe('CustomPoolRates', () => {
 
               const currentCache = await pool.getTokenRateCache(token.address);
               expect(currentCache.rate).to.be.equal(newRate);
-              expect(previousCache.rate).not.to.be.equal(newRate);
             });
           });
 
@@ -414,8 +408,8 @@ describe('CustomPoolRates', () => {
               const receipt = await action(token);
 
               expectEvent.inReceipt(await receipt.wait(), 'TokenRateCacheUpdated', {
+                tokenIndex: i,
                 rate: newRate,
-                token: token.address,
               });
             });
           });
@@ -583,7 +577,7 @@ describe('CustomPoolRates', () => {
                 const tx = await pool.connect(caller).setTokenRateCacheDuration(token.address, newDuration);
 
                 expectEvent.inReceipt(await tx.wait(), 'TokenRateProviderSet', {
-                  token: token.address,
+                  tokenIndex: i,
                   provider: allRateProviders[i],
                   cacheDuration: newDuration,
                 });
@@ -604,7 +598,7 @@ describe('CustomPoolRates', () => {
                 const tx = await pool.connect(caller).setTokenRateCacheDuration(token.address, newDuration);
 
                 expectEvent.inReceipt(await tx.wait(), 'TokenRateCacheUpdated', {
-                  token: token.address,
+                  tokenIndex: i,
                   rate: newRate,
                 });
               });
@@ -784,33 +778,27 @@ describe('CustomPoolRates', () => {
     });
 
     describe('getAdjustedBalances', () => {
-      let allTokens: TokenList;
-      let allRateProviders: string[];
-      let allExemptFlags: boolean[];
       let rates: BigNumber[];
 
       sharedBeforeEach('deploy pool', async () => {
         await deployPoolSimple(owner, tokens);
-        allTokens = await tokensWithBpt();
-        allRateProviders = await rateProvidersWithBpt();
-        allExemptFlags = await exemptFlagsWithBpt();
       });
 
       sharedBeforeEach('mock rates', async () => {
-        await allTokens.asyncEach(async (token, i) => {
-          if (allRateProviders[i] === ZERO_ADDRESS) return;
-          const rateProvider = await deployedAt('v2-pool-utils/MockRateProvider', allRateProviders[i]);
+        await tokens.asyncEach(async (token, i) => {
+          if (rateProviders[i] === ZERO_ADDRESS) return;
+          const rateProvider = await deployedAt('v2-pool-utils/MockRateProvider', rateProviders[i]);
           await rateProvider.mockRate(fp(1 + i / 10));
           await pool.updateTokenRateCache(token.address);
         });
-        rates = await getRates(allRateProviders);
+        rates = await getRates(rateProviders);
 
         // Set rates to zero. If the pool is reading from the rate provider directly then this will cause reverts.
         // This ensures that the pool is using its cache properly.
-        await allTokens.asyncEach(async (_, i) => {
-          if (allRateProviders[i] === ZERO_ADDRESS) return;
+        await tokens.asyncEach(async (_, i) => {
+          if (rateProviders[i] === ZERO_ADDRESS) return;
 
-          const rateProvider = await deployedAt('v2-pool-utils/MockRateProvider', allRateProviders[i]);
+          const rateProvider = await deployedAt('v2-pool-utils/MockRateProvider', rateProviders[i]);
           await rateProvider.mockRate(fp(0));
         });
       });
@@ -818,7 +806,7 @@ describe('CustomPoolRates', () => {
       context('when ignoring exempt flags', () => {
         it('returns the array with elements scaled by the ratio of current and old cached token rates', async () => {
           for (let i = 0; i < 5; i++) {
-            const inputArray = allTokens.map(() => fp(Math.random()));
+            const inputArray = tokens.map(() => fp(Math.random()));
             const expectedOutputArray = inputArray.map((input, i) => input.mul(fp(1)).div(rates[i]));
 
             expect(await pool.getAdjustedBalances(inputArray, true)).to.be.deep.eq(expectedOutputArray);
@@ -829,9 +817,9 @@ describe('CustomPoolRates', () => {
       context('when not ignoring exempt flags', () => {
         it('returns the array with elements scaled by the ratio of current and old cached token rates if exempt', async () => {
           for (let i = 0; i < 5; i++) {
-            const inputArray = allTokens.map(() => fp(Math.random()));
+            const inputArray = tokens.map(() => fp(Math.random()));
             const expectedOutputArray = inputArray.map((input, i) =>
-              allExemptFlags[i] ? input.mul(fp(1)).div(rates[i]) : input
+              exemptFromYieldProtocolFeeFlags[i] ? input.mul(fp(1)).div(rates[i]) : input
             );
 
             expect(await pool.getAdjustedBalances(inputArray, false)).to.be.deep.eq(expectedOutputArray);

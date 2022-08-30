@@ -17,22 +17,26 @@ pragma experimental ABIEncoderV2;
 
 import "@balancer-labs/v2-solidity-utils/contracts/helpers/ERC20Helpers.sol";
 
-import "../CustomPoolStorage.sol";
+import "../ComposableCustomPoolStorage.sol";
 
-contract MockCustomPoolStorage is CustomPoolStorage {
+contract MockComposableCustomPoolStorage is ComposableCustomPoolStorage {
     constructor(
         IVault vault,
         IERC20[] memory tokens,
         IRateProvider[] memory tokenRateProviders,
         bool[] memory exemptFromYieldProtocolFeeFlags
     )
-        CustomPoolStorage(
-            StorageParams(_insertSorted(tokens, IERC20(this)), tokenRateProviders, exemptFromYieldProtocolFeeFlags)
+        ComposableCustomPoolStorage(
+            StorageParams({
+                registeredTokens: _insertSorted(tokens, IERC20(this)),
+                tokenRateProviders: tokenRateProviders,
+                exemptFromYieldProtocolFeeFlags: exemptFromYieldProtocolFeeFlags
+            })
         )
         BasePool(
             vault,
             IVault.PoolSpecialization.GENERAL,
-            "MockCustomPoolStorage",
+            "MockComposableCustomPoolStorage",
             "MOCK_BPT",
             _insertSorted(tokens, IERC20(this)),
             new address[](tokens.length + 1),
@@ -63,37 +67,6 @@ contract MockCustomPoolStorage is CustomPoolStorage {
         returns (uint256[] memory amountsWithBpt)
     {
         return _addBptItem(amounts, bptAmount);
-    }
-
-    /**
-     * @notice Return the scaling factor for a token. This includes both the token decimals and the rate.
-     */
-    function getScalingFactor(IERC20 token) external view returns (uint256) {
-        return _scalingFactor(token);
-    }
-
-    function getToken0() external view returns (IERC20) {
-        return _getToken0();
-    }
-
-    function getToken1() external view returns (IERC20) {
-        return _getToken1();
-    }
-
-    function getToken2() external view returns (IERC20) {
-        return _getToken2();
-    }
-
-    function getToken3() external view returns (IERC20) {
-        return _getToken3();
-    }
-
-    function getToken4() external view returns (IERC20) {
-        return _getToken4();
-    }
-
-    function getToken5() external view returns (IERC20) {
-        return _getToken5();
     }
 
     function getRateProvider0() external view returns (IRateProvider) {
@@ -144,13 +117,21 @@ contract MockCustomPoolStorage is CustomPoolStorage {
         return _getScalingFactor5();
     }
 
-    function getRateProvider(IERC20 token) external view returns (IRateProvider) {
-        return _getRateProvider(token);
+    function getRateProvider(uint256 index) external view returns (IRateProvider) {
+        return _getRateProvider(index);
     }
 
     // This assumes the tokenIndex is valid. If it's not, it will just return false.
     function isTokenExemptFromYieldProtocolFeeByIndex(uint256 tokenIndex) external view returns (bool) {
         return _isTokenExemptFromYieldProtocolFee(tokenIndex);
+    }
+
+    function areAllTokensExempt() external view returns (bool) {
+        return _areAllTokensExempt();
+    }
+
+    function areNoTokensExempt() external view returns (bool) {
+        return _areNoTokensExempt();
     }
 
     // Stubbed functions

@@ -15,7 +15,7 @@
 pragma solidity ^0.7.0;
 pragma experimental ABIEncoderV2;
 
-import "@balancer-labs/v2-interfaces/contracts/pool-custom-phantom/CustomPhantomPoolUserData.sol";
+import "@balancer-labs/v2-interfaces/contracts/pool-custom/CustomPoolUserData.sol";
 import "@balancer-labs/v2-interfaces/contracts/solidity-utils/helpers/BalancerErrors.sol";
 import "@balancer-labs/v2-interfaces/contracts/standalone-utils/IProtocolFeePercentagesProvider.sol";
 import "@balancer-labs/v2-interfaces/contracts/pool-utils/IRateProvider.sol";
@@ -27,11 +27,13 @@ import "@balancer-labs/v2-solidity-utils/contracts/helpers/InputHelpers.sol";
 
 import "@balancer-labs/v2-pool-utils/contracts/BaseGeneralPool.sol";
 import "@balancer-labs/v2-pool-utils/contracts/rates/PriceRateCache.sol";
-import "@balancer-labs/v2-pool-utils/contracts/ProtocolFeeCache.sol";
 
+import "./ComposableCustomPoolStorage.sol";
+import "./ComposableCustomPoolRates.sol";
+import "./ComposableCustomPoolStorage.sol";
+import "./ComposableCustomPoolRates.sol";
+import "./ComposableCustomPoolProtocolFees.sol";
 import "./CustomPoolAmplification.sol";
-import "./CustomPoolStorage.sol";
-import "./CustomPoolRates.sol";
 import "./CustomMath.sol";
 
 /**
@@ -42,41 +44,25 @@ import "./CustomMath.sol";
  * single-token joins or exits (by swapping a token for BPT). We also support regular joins and exits, which can mint
  * and burn BPT.
  *
- * Preminted BPT is sometimes called Phantom BPT, as the preminted BPT (which is deposited in the Vault as balance of
- * the Pool) doesn't belong to any entity until transferred out of the Pool. The Pool's arithmetic behaves as if it
- * didn't exist, and the BPT total supply is not a useful value: we rely on the 'virtual supply' (how much BPT is
- * actually owned outside the Vault) instead.
+ * Preminted BPT is deposited in the Vault as the initial balance of the Pool, and doesn't belong to any entity until
+ * transferred out of the Pool. The Pool's arithmetic behaves as if it didn't exist, and the BPT total supply is not
+ * a useful value: we rely on the 'virtual supply' (how much BPT is actually owned outside the Vault) instead.
  */
-contract CustomPhantomPool is
+contract ComposableCustomPool is
     IRateProvider,
     BaseGeneralPool,
     CustomPoolAmplification,
-    CustomPoolRates,
-    ProtocolFeeCache
+    ComposableCustomPoolRates,
+    ComposableCustomPoolProtocolFees
 {
     using FixedPoint for uint256;
     using PriceRateCache for bytes32;
-    using CustomPhantomPoolUserData for bytes;
+    using CustomPoolUserData for bytes;
     using BasePoolUserData for bytes;
 
     // The maximum imposed by the Vault, which stores balances in a packed format, is 2**(112) - 1.
     // We are preminting half of that value (rounded up).
     uint256 private constant _PREMINTED_TOKEN_BALANCE = 2**(111);
-
-    // This contract uses timestamps to slowly update its Amplification parameter over time. These changes must occur
-    // over a minimum time period much larger than the blocktime, making timestamp manipulation a non-issue.
-    // solhint-disable not-rely-on-time
-
-    // To track protocol fees, we measure and store the value of the invariant after every join and exit.
-    // All invariant growth that happens between join and exit events is due to swap fees and yield.
-    // For selected tokens, we exclude the yield portion from the computation.
-    uint256 private _postJoinExitInvariant;
-
-    // Because the invariant depends on the amplification parameter, and this value may change over time, we should only
-    // compare invariants that were computed using the same value. We therefore store `_postJoinExitAmp` whenever we
-    // store `_postJoinExitInvariant`.
-    uint256 private _postJoinExitAmp1;
-    uint256 private _postJoinExitAmp2;
 
     // The constructor arguments are received in a struct to work around stack-too-deep issues
     struct NewPoolParams {
@@ -110,8 +96,8 @@ contract CustomPhantomPool is
             params.owner
         )
         CustomPoolAmplification(params.amplificationParameter1, params.amplificationParameter2)
-        CustomPoolStorage(_extractStorageParams(params))
-        CustomPoolRates(_extractRatesParams(params))
+        ComposableCustomPoolStorage(_extractStorageParams(params))
+        ComposableCustomPoolRates(_extractRatesParams(params))
         ProtocolFeeCache(params.protocolFeeProvider, ProtocolFeeCache.DELEGATE_PROTOCOL_SWAP_FEES_SENTINEL)
     {
         // solhint-disable-previous-line no-empty-blocks
@@ -121,23 +107,28 @@ contract CustomPhantomPool is
     function _extractRatesParams(NewPoolParams memory params)
         private
         pure
-        returns (CustomPoolRates.RatesParams memory)
+        returns (ComposableCustomPoolRates.RatesParams memory)
     {
-        return CustomPoolRates.RatesParams(params.tokens, params.rateProviders, params.tokenRateCacheDurations);
+        return
+            ComposableCustomPoolRates.RatesParams({
+                tokens: params.tokens,
+                rateProviders: params.rateProviders,
+                tokenRateCacheDurations: params.tokenRateCacheDurations
+            });
     }
 
     // Translate parameters to avoid stack-too-deep issues in the constructor
     function _extractStorageParams(NewPoolParams memory params)
         private
         view
-        returns (CustomPoolStorage.StorageParams memory)
+        returns (ComposableCustomPoolStorage.StorageParams memory)
     {
         return
-            CustomPoolStorage.StorageParams(
-                _insertSorted(params.tokens, IERC20(this)),
-                params.rateProviders,
-                params.exemptFromYieldProtocolFeeFlags
-            );
+            ComposableCustomPoolStorage.StorageParams({
+                registeredTokens: _insertSorted(params.tokens, IERC20(this)),
+                tokenRateProviders: params.rateProviders,
+                exemptFromYieldProtocolFeeFlags: params.exemptFromYieldProtocolFeeFlags
+            });
     }
 
     /**
@@ -174,7 +165,8 @@ contract CustomPhantomPool is
      * or a swap involving BPT, which is equivalent to a single token join or exit. Since one of the Pool's
      * tokens is the preminted BPT, we need to handle swaps where BPT is involved separately.
      *
-     * At this point, the balances are unscaled.
+     * At this point, the balances are unscaled. The indices are coming from the Vault, so they are indices into
+     * the array of registered tokens (including BPT).
      *
      * If this is a swap involving BPT, call `_swapWithBpt`, which computes the amountOut using the swapFeePercentage
      * and charges protocol fees, in the same manner as single token join/exits. Otherwise, perform the default
@@ -182,15 +174,21 @@ contract CustomPhantomPool is
      */
     function _swapGivenIn(
         SwapRequest memory swapRequest,
-        uint256[] memory balances,
-        uint256 indexIn,
-        uint256 indexOut,
+        uint256[] memory registeredBalances,
+        uint256 registeredIndexIn,
+        uint256 registeredIndexOut,
         uint256[] memory scalingFactors
-    ) internal virtual override whenNotPaused returns (uint256) {
+    ) internal virtual override returns (uint256) {
         return
             (swapRequest.tokenIn == IERC20(this) || swapRequest.tokenOut == IERC20(this))
-                ? _swapWithBpt(swapRequest, balances, indexIn, indexOut, scalingFactors)
-                : super._swapGivenIn(swapRequest, balances, indexIn, indexOut, scalingFactors);
+                ? _swapWithBpt(swapRequest, registeredBalances, registeredIndexIn, registeredIndexOut, scalingFactors)
+                : super._swapGivenIn(
+                    swapRequest,
+                    registeredBalances,
+                    registeredIndexIn,
+                    registeredIndexOut,
+                    scalingFactors
+                );
     }
 
     /**
@@ -198,7 +196,8 @@ contract CustomPhantomPool is
      * or a swap involving BPT, which is equivalent to a single token join or exit. Since one of the Pool's
      * tokens is the preminted BPT, we need to handle swaps where BPT is involved separately.
      *
-     * At this point, the balances are unscaled.
+     * At this point, the balances are unscaled. The indices and balances are coming from the Vault, so they
+     * refer to the full set of registered tokens (including BPT).
      *
      * If this is a swap involving BPT, call `_swapWithBpt`, which computes the amountOut using the swapFeePercentage
      * and charges protocol fees, in the same manner as single token join/exits. Otherwise, perform the default
@@ -206,15 +205,21 @@ contract CustomPhantomPool is
      */
     function _swapGivenOut(
         SwapRequest memory swapRequest,
-        uint256[] memory balances,
-        uint256 indexIn,
-        uint256 indexOut,
+        uint256[] memory registeredBalances,
+        uint256 registeredIndexIn,
+        uint256 registeredIndexOut,
         uint256[] memory scalingFactors
-    ) internal virtual override whenNotPaused returns (uint256) {
+    ) internal virtual override returns (uint256) {
         return
             (swapRequest.tokenIn == IERC20(this) || swapRequest.tokenOut == IERC20(this))
-                ? _swapWithBpt(swapRequest, balances, indexIn, indexOut, scalingFactors)
-                : super._swapGivenOut(swapRequest, balances, indexIn, indexOut, scalingFactors);
+                ? _swapWithBpt(swapRequest, registeredBalances, registeredIndexIn, registeredIndexOut, scalingFactors)
+                : super._swapGivenOut(
+                    swapRequest,
+                    registeredBalances,
+                    registeredIndexIn,
+                    registeredIndexOut,
+                    scalingFactors
+                );
     }
 
     /**
@@ -224,11 +229,18 @@ contract CustomPhantomPool is
      */
     function _onSwapGivenIn(
         SwapRequest memory request,
-        uint256[] memory balancesIncludingBpt,
-        uint256 indexIn,
-        uint256 indexOut
-    ) internal virtual override returns (uint256 amountOut) {
-        return _onRegularSwap(IVault.SwapKind.GIVEN_IN, request.amount, balancesIncludingBpt, indexIn, indexOut);
+        uint256[] memory registeredBalances,
+        uint256 registeredIndexIn,
+        uint256 registeredIndexOut
+    ) internal virtual override returns (uint256) {
+        return
+            _onRegularSwap(OnRegularSwapParams(
+                true, // given in
+                request.amount,
+                registeredBalances,
+                registeredIndexIn,
+                registeredIndexOut)
+            );
     }
 
     /**
@@ -238,37 +250,46 @@ contract CustomPhantomPool is
      */
     function _onSwapGivenOut(
         SwapRequest memory request,
-        uint256[] memory balancesIncludingBpt,
-        uint256 indexIn,
-        uint256 indexOut
-    ) internal virtual override returns (uint256 amountIn) {
-        return _onRegularSwap(IVault.SwapKind.GIVEN_OUT, request.amount, balancesIncludingBpt, indexIn, indexOut);
+        uint256[] memory registeredBalances,
+        uint256 registeredIndexIn,
+        uint256 registeredIndexOut
+    ) internal virtual override returns (uint256) {
+        return
+            _onRegularSwap(OnRegularSwapParams(
+                false, // given out
+                request.amount,
+                registeredBalances,
+                registeredIndexIn,
+                registeredIndexOut)
+            );
     }
 
     /**
      * @dev Perform a swap between non-BPT tokens. Scaling and fee adjustments have been performed upstream, so
      * all we need to do here is calculate the price quote, depending on the direction of the swap.
      */
-    function _onRegularSwap(
-        IVault.SwapKind kind,
-        uint256 amountGiven,
-        uint256[] memory balancesIncludingBpt,
-        uint256 indexIn,
-        uint256 indexOut
-    ) private view returns (uint256) {
-        uint256[] memory balances = _dropBptItem(balancesIncludingBpt);
+    struct OnRegularSwapParams {
+        bool isGivenIn;
+        uint256 amountGiven;
+        uint256[] registeredBalances;
+        uint256 registeredIndexIn;
+        uint256 registeredIndexOut;
+    }
+
+    function _onRegularSwap(OnRegularSwapParams memory params) private view returns (uint256) {
+        // Adjust indices and balances for BPT token
+        uint256[] memory balances = _dropBptItem(params.registeredBalances);
+        uint256 indexIn = _skipBptIndex(params.registeredIndexIn);
+        uint256 indexOut = _skipBptIndex(params.registeredIndexOut);
+
         (uint256 currentAmp1, ) = _getAmplificationParameter1();
         (uint256 currentAmp2, ) = _getAmplificationParameter2();
         uint256 invariant = CustomMath._calculateInvariant(currentAmp1, currentAmp2, balances);
 
-        // Adjust indices for BPT token
-        indexIn = _skipBptIndex(indexIn);
-        indexOut = _skipBptIndex(indexOut);
-
-        if (kind == IVault.SwapKind.GIVEN_IN) {
-            return CustomMath._calcOutGivenIn(currentAmp1, currentAmp2, balances, indexIn, indexOut, amountGiven, invariant);
+        if (params.isGivenIn) {
+            return CustomMath._calcOutGivenIn(currentAmp1, currentAmp2, balances, indexIn, indexOut, params.amountGiven, invariant);
         } else {
-            return CustomMath._calcInGivenOut(currentAmp1, currentAmp2, balances, indexIn, indexOut, amountGiven, invariant);
+            return CustomMath._calcInGivenOut(currentAmp1, currentAmp2, balances, indexIn, indexOut, params.amountGiven, invariant);
         }
     }
 
@@ -283,77 +304,79 @@ contract CustomPhantomPool is
      */
     function _swapWithBpt(
         SwapRequest memory swapRequest,
-        uint256[] memory balances,
-        uint256 indexIn,
-        uint256 indexOut,
+        uint256[] memory registeredBalances,
+        uint256 registeredIndexIn,
+        uint256 registeredIndexOut,
         uint256[] memory scalingFactors
     ) private returns (uint256) {
-        // bool isGivenIn = swapRequest.kind == IVault.SwapKind.GIVEN_IN;
+        // Stack too deep
+        // isGivenIn = swapRequest.kind == IVault.SwapKind.GIVEN_IN;
 
-        _upscaleArray(balances, scalingFactors);
-        swapRequest.amount = _upscale(swapRequest.amount, scalingFactors[swapRequest.kind == IVault.SwapKind.GIVEN_IN ? indexIn : indexOut]);
+        _upscaleArray(registeredBalances, scalingFactors);
+        swapRequest.amount = _upscale(
+            swapRequest.amount,
+            scalingFactors[swapRequest.kind == IVault.SwapKind.GIVEN_IN ? registeredIndexIn : registeredIndexOut]
+        );
 
-        (uint256 preJoinExitSupply, uint256[] memory balancesWithoutBpt) = _payProtocolFeesBeforeJoinExit(balances);
-        (uint256 currentAmp1, ) = _getAmplificationParameter1();
-        (uint256 currentAmp2, ) = _getAmplificationParameter2();
+        BeforeJoinExitReturn memory rets = _beforeJoinExit(registeredBalances);
 
-        uint256 preJoinExitInvariant = CustomMath._calculateInvariant(currentAmp1, currentAmp2, balancesWithoutBpt);
-
-        (uint256 amountCalculated, uint256 postJoinExitSupply) = indexOut == getBptIndex()
+        // These calls mutate `balances` so that it holds the post join-exit balances.
+        (uint256 amountCalculated, uint256 postJoinExitSupply) = registeredIndexOut == getBptIndex()
             ? _doJoinSwap(
                 swapRequest.kind == IVault.SwapKind.GIVEN_IN,
                 swapRequest.amount,
-                balancesWithoutBpt,
-                _skipBptIndex(indexIn),
-                currentAmp1,
-                currentAmp2,
-                preJoinExitSupply,
-                preJoinExitInvariant
+                rets.balances,
+                _skipBptIndex(registeredIndexIn),
+                rets.currentAmp1,
+                rets.currentAmp2,
+                rets.preJoinExitSupply,
+                rets.preJoinExitInvariant
             )
             : _doExitSwap(
                 swapRequest.kind == IVault.SwapKind.GIVEN_IN,
                 swapRequest.amount,
-                balancesWithoutBpt,
-                _skipBptIndex(indexOut),
-                currentAmp1,
-                currentAmp2,
-                preJoinExitSupply,
-                preJoinExitInvariant
+                rets.balances,
+                _skipBptIndex(registeredIndexOut),
+                rets.currentAmp1,
+                rets.currentAmp2,
+                rets.preJoinExitSupply,
+                rets.preJoinExitInvariant
             );
 
         _updateInvariantAfterJoinExit(
-            currentAmp1,
-            currentAmp2,
-            balancesWithoutBpt,
-            preJoinExitInvariant,
-            preJoinExitSupply,
+            rets.currentAmp1,
+            rets.currentAmp2,
+            rets.balances,
+            rets.preJoinExitInvariant,
+            rets.preJoinExitSupply,
             postJoinExitSupply
         );
 
         return
             swapRequest.kind == IVault.SwapKind.GIVEN_IN
-                ? _downscaleDown(amountCalculated, scalingFactors[indexOut])
-                : _downscaleUp(amountCalculated, scalingFactors[indexIn]);
+                ? _downscaleDown(amountCalculated, scalingFactors[registeredIndexOut]) // Amount out, round down
+                : _downscaleUp(amountCalculated, scalingFactors[registeredIndexIn]); // Amount in, round up
     }
 
     /**
-     * @dev This mutates balancesWithoutBpt so that they become the post-joinswap balances. The CustomMath interfaces
+     * @dev This mutates `balances` so that they become the post-joinswap balances. The CustomMath interfaces
      * are different depending on the swap direction, so we forward to the appropriate low-level join function.
      */
     function _doJoinSwap(
         bool isGivenIn,
         uint256 amount,
-        uint256[] memory balancesWithoutBpt,
+        uint256[] memory balances,
         uint256 indexIn,
         uint256 currentAmp1,
         uint256 currentAmp2,
         uint256 virtualSupply,
-        uint256 preJoinExitInvariant) internal view returns (uint256, uint256) {
+        uint256 preJoinExitInvariant
+    ) internal view returns (uint256, uint256) {
         return
             isGivenIn
                 ? _joinSwapExactTokenInForBptOut(
                     amount,
-                    balancesWithoutBpt,
+                    balances,
                     indexIn,
                     currentAmp1,
                     currentAmp2,
@@ -362,7 +385,7 @@ contract CustomPhantomPool is
                 )
                 : _joinSwapExactBptOutForTokenIn(
                     amount,
-                    balancesWithoutBpt,
+                    balances,
                     indexIn,
                     currentAmp1,
                     currentAmp2,
@@ -378,7 +401,7 @@ contract CustomPhantomPool is
      */
     function _joinSwapExactTokenInForBptOut(
         uint256 amountIn,
-        uint256[] memory balancesWithoutBpt,
+        uint256[] memory balances,
         uint256 indexIn,
         uint256 currentAmp1,
         uint256 currentAmp2,
@@ -387,21 +410,21 @@ contract CustomPhantomPool is
     ) internal view returns (uint256, uint256) {
         // The CustomMath function was created with joins in mind, so it expects a full amounts array. We create an
         // empty one and only set the amount for the token involved.
-        uint256[] memory amountsIn = new uint256[](balancesWithoutBpt.length);
+        uint256[] memory amountsIn = new uint256[](balances.length);
         amountsIn[indexIn] = amountIn;
 
         uint256 bptOut = CustomMath._calcBptOutGivenExactTokensIn(
             currentAmp1,
             currentAmp2,
-            balancesWithoutBpt,
+            balances,
             amountsIn,
             virtualSupply,
             preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
-        balancesWithoutBpt[indexIn] += amountIn;
-        uint256 postJoinExitSupply = virtualSupply + bptOut;
+        balances[indexIn] = balances[indexIn].add(amountIn);
+        uint256 postJoinExitSupply = virtualSupply.add(bptOut);
 
         return (bptOut, postJoinExitSupply);
     }
@@ -413,7 +436,7 @@ contract CustomPhantomPool is
      */
     function _joinSwapExactBptOutForTokenIn(
         uint256 bptOut,
-        uint256[] memory balancesWithoutBpt,
+        uint256[] memory balances,
         uint256 indexIn,
         uint256 currentAmp1,
         uint256 currentAmp2,
@@ -423,7 +446,7 @@ contract CustomPhantomPool is
         uint256 amountIn = CustomMath._calcTokenInGivenExactBptOut(
             currentAmp1,
             currentAmp2,
-            balancesWithoutBpt,
+            balances,
             indexIn,
             bptOut,
             virtualSupply,
@@ -431,31 +454,31 @@ contract CustomPhantomPool is
             getSwapFeePercentage()
         );
 
-        balancesWithoutBpt[indexIn] += amountIn;
-        uint256 postJoinExitSupply = virtualSupply + bptOut;
+        balances[indexIn] = balances[indexIn].add(amountIn);
+        uint256 postJoinExitSupply = virtualSupply.add(bptOut);
 
         return (amountIn, postJoinExitSupply);
     }
 
     /**
-     * @dev This mutates balancesWithoutBpt so that they become the post-exitswap balances. The CustomMath interfaces
-     * are different depending on the swap direction, so we forward to the appropriate low-level exit function.
+     * @dev This mutates balances so that they become the post-exitswap balances. The CustomMath interfaces are
+     * different depending on the swap direction, so we forward to the appropriate low-level exit function.
      */
-
     function _doExitSwap(
         bool isGivenIn,
         uint256 amount,
-        uint256[] memory balancesWithoutBpt,
+        uint256[] memory balances,
         uint256 indexOut,
         uint256 currentAmp1,
         uint256 currentAmp2,
         uint256 virtualSupply,
-        uint256 preJoinExitInvariant) internal view returns (uint256, uint256) {
+        uint256 preJoinExitInvariant
+    ) internal view returns (uint256, uint256) {
         return
             isGivenIn
                 ? _exitSwapExactBptInForTokenOut(
                     amount,
-                    balancesWithoutBpt,
+                    balances,
                     indexOut,
                     currentAmp1,
                     currentAmp2,
@@ -464,7 +487,7 @@ contract CustomPhantomPool is
                 )
                 : _exitSwapExactTokenOutForBptIn(
                     amount,
-                    balancesWithoutBpt,
+                    balances,
                     indexOut,
                     currentAmp1,
                     currentAmp2,
@@ -480,7 +503,7 @@ contract CustomPhantomPool is
      */
     function _exitSwapExactBptInForTokenOut(
         uint256 bptAmount,
-        uint256[] memory balancesWithoutBpt,
+        uint256[] memory balances,
         uint256 indexOut,
         uint256 currentAmp1,
         uint256 currentAmp2,
@@ -490,7 +513,7 @@ contract CustomPhantomPool is
         uint256 amountOut = CustomMath._calcTokenOutGivenExactBptIn(
             currentAmp1,
             currentAmp2,
-            balancesWithoutBpt,
+            balances,
             indexOut,
             bptAmount,
             virtualSupply,
@@ -498,8 +521,8 @@ contract CustomPhantomPool is
             getSwapFeePercentage()
         );
 
-        balancesWithoutBpt[indexOut] -= amountOut;
-        uint256 postJoinExitSupply = virtualSupply - bptAmount;
+        balances[indexOut] = balances[indexOut].sub(amountOut);
+        uint256 postJoinExitSupply = virtualSupply.sub(bptAmount);
 
         return (amountOut, postJoinExitSupply);
     }
@@ -511,7 +534,7 @@ contract CustomPhantomPool is
      */
     function _exitSwapExactTokenOutForBptIn(
         uint256 amountOut,
-        uint256[] memory balancesWithoutBpt,
+        uint256[] memory balances,
         uint256 indexOut,
         uint256 currentAmp1,
         uint256 currentAmp2,
@@ -520,21 +543,21 @@ contract CustomPhantomPool is
     ) internal view returns (uint256, uint256) {
         // The CustomMath function was created with exits in mind, so it expects a full amounts array. We create an
         // empty one and only set the amount for the token involved.
-        uint256[] memory amountsOut = new uint256[](balancesWithoutBpt.length);
+        uint256[] memory amountsOut = new uint256[](balances.length);
         amountsOut[indexOut] = amountOut;
 
         uint256 bptAmount = CustomMath._calcBptInGivenExactTokensOut(
             currentAmp1,
             currentAmp2,
-            balancesWithoutBpt,
+            balances,
             amountsOut,
             virtualSupply,
             preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
-        balancesWithoutBpt[indexOut] -= amountOut;
-        uint256 postJoinExitSupply = virtualSupply - bptAmount;
+        balances[indexOut] = balances[indexOut].sub(amountOut);
+        uint256 postJoinExitSupply = virtualSupply.sub(bptAmount);
 
         return (bptAmount, postJoinExitSupply);
     }
@@ -556,8 +579,8 @@ contract CustomPhantomPool is
         uint256[] memory scalingFactors,
         bytes memory userData
     ) internal override returns (uint256, uint256[] memory) {
-        CustomPhantomPoolUserData.JoinKindPhantom kind = userData.joinKind();
-        _require(kind == CustomPhantomPoolUserData.JoinKindPhantom.INIT, Errors.UNINITIALIZED);
+        CustomPoolUserData.JoinKind kind = userData.joinKind();
+        _require(kind == CustomPoolUserData.JoinKind.INIT, Errors.UNINITIALIZED);
 
         // AmountsIn usually does not include the BPT token; initialization is the one time it has to.
         uint256[] memory amountsInIncludingBpt = userData.initialAmountsIn();
@@ -584,13 +607,8 @@ contract CustomPhantomPool is
         _mintPoolTokens(sender, initialBpt);
         amountsInIncludingBpt[getBptIndex()] = initialBpt;
 
-        // Update invariant after join
-        _postJoinExitInvariant = invariantAfterJoin;
-        _postJoinExitAmp1 = amp1;
-        _postJoinExitAmp2 = amp2;
-
-        // Initialize the OldRates
-        _updateOldRates();
+        // Initialization is still a join, so we need to do post-join work.
+        _updatePostJoinExit(amp1, amp2, invariantAfterJoin);
 
         return (bptAmountOut, amountsInIncludingBpt);
     }
@@ -602,13 +620,13 @@ contract CustomPhantomPool is
         bytes32,
         address,
         address,
-        uint256[] memory balances,
+        uint256[] memory registeredBalances,
         uint256,
         uint256,
         uint256[] memory scalingFactors,
         bytes memory userData
     ) internal override returns (uint256, uint256[] memory) {
-        return _onJoinExitPool(true, balances, scalingFactors, userData);
+        return _onJoinExitPool(true, registeredBalances, scalingFactors, userData);
     }
 
     /**
@@ -619,73 +637,59 @@ contract CustomPhantomPool is
         bytes32,
         address,
         address,
-        uint256[] memory balances,
+        uint256[] memory registeredBalances,
         uint256,
         uint256,
         uint256[] memory scalingFactors,
         bytes memory userData
     ) internal override returns (uint256, uint256[] memory) {
-        return _onJoinExitPool(false, balances, scalingFactors, userData);
+        return _onJoinExitPool(false, registeredBalances, scalingFactors, userData);
     }
 
     /**
      * @dev Pay protocol fees before the operation, and call `_updateInvariantAfterJoinExit` afterward, to establish
      * the new basis for protocol fees.
      */
-    struct PreCalcReturn {
-        uint256 preJoinExitSupply;
-        uint256[] balancesWithoutBpt;
-        uint256 currentAmp1;
-        uint256 currentAmp2;
-        uint256 preJoinExitInvariant;
-    }
-
-    function _preCalcJoinExitPool(uint256[] memory balances) internal returns (PreCalcReturn memory)
-    {
-        (uint256 preJoinExitSupply, uint256[] memory balancesWithoutBpt) = _payProtocolFeesBeforeJoinExit(balances);
-        (uint256 currentAmp1, ) = _getAmplificationParameter1();
-        (uint256 currentAmp2, ) = _getAmplificationParameter2();
-        uint256 preJoinExitInvariant = CustomMath._calculateInvariant(currentAmp1, currentAmp2, balancesWithoutBpt);
-        return PreCalcReturn({
-           preJoinExitSupply:preJoinExitSupply,
-           balancesWithoutBpt:balancesWithoutBpt,
-           currentAmp1:currentAmp1,
-           currentAmp2:currentAmp2,
-           preJoinExitInvariant:preJoinExitInvariant
-        });
-    }
-
     function _onJoinExitPool(
         bool isJoin,
-        uint256[] memory balances,
+        uint256[] memory registeredBalances,
         uint256[] memory scalingFactors,
         bytes memory userData
     ) internal returns (uint256, uint256[] memory) {
 
-        PreCalcReturn memory r = _preCalcJoinExitPool(balances);
+        BeforeJoinExitReturn memory rets = _beforeJoinExit(registeredBalances);
 
-        uint256 bptAmount;
-        uint256[] memory amountsDelta;
+        function(DoJoinParams memory, bytes memory)
+                internal
+                view
+                returns (uint256, uint256[] memory) _doJoinOrExit
+         = (isJoin ? _doJoin : _doExit);
 
-        if (isJoin)
-            (bptAmount, amountsDelta) = _doJoin(r, scalingFactors, userData);
-        else
-            (bptAmount, amountsDelta) = _doExit(r, scalingFactors, userData);
+        (uint256 bptAmount, uint256[] memory amountsDelta) = _doJoinOrExit(
+            DoJoinParams(
+                rets.balances,
+                rets.currentAmp1,
+                rets.currentAmp2,
+                rets.preJoinExitSupply,
+                rets.preJoinExitInvariant,
+                scalingFactors),
+            userData
+        );
 
-
-        // Unlike joinswaps, explicit joins do not mutate balancesWithoutBpt into the post join balances so we must
-        // perform this mutation here.
-        _mutateAmounts(r.balancesWithoutBpt, amountsDelta, isJoin ? FixedPoint.add : FixedPoint.sub);
-        uint256 postJoinExitSupply = isJoin ? r.preJoinExitSupply + bptAmount : r.preJoinExitSupply - bptAmount;
+        // Unlike joinswaps, explicit joins do not mutate balances into the post join-exit balances so we must perform
+        // this mutation here.
+        function(uint256, uint256) internal pure returns (uint256) _addOrSub = isJoin ? FixedPoint.add : FixedPoint.sub;
+        _mutateAmounts(rets.balances, amountsDelta, _addOrSub);
+        uint256 postJoinExitSupply = _addOrSub(rets.preJoinExitSupply, bptAmount);
 
         // Pass in the post-join balances to reset the protocol fee basis.
         // We are minting bptAmount, increasing the total (and virtual) supply post-join
         _updateInvariantAfterJoinExit(
-            r.currentAmp1,
-            r.currentAmp2,
-            r.balancesWithoutBpt,
-            r.preJoinExitInvariant,
-            r.preJoinExitSupply,
+            rets.currentAmp1,
+            rets.currentAmp2,
+            rets.balances,
+            rets.preJoinExitInvariant,
+            rets.preJoinExitSupply,
             postJoinExitSupply
         );
 
@@ -695,45 +699,88 @@ contract CustomPhantomPool is
     }
 
     /**
+     * @dev Pay any due protocol fees and calculate values necessary for performing the join/exit.
+     */
+    struct BeforeJoinExitReturn {
+         uint256 preJoinExitSupply;
+         uint256[] balances;
+         uint256 currentAmp1;
+         uint256 currentAmp2;
+         uint256 preJoinExitInvariant;
+    }
+
+    function _beforeJoinExit(uint256[] memory registeredBalances) internal returns (BeforeJoinExitReturn memory)
+    {
+        (uint256 lastJoinExitAmp1, uint256 lastJoinExitAmp2, uint256 lastPostJoinExitInvariant) = getLastJoinExitData();
+        // TODO FIX ME: make sure the below is right
+        (
+            uint256 preJoinExitSupply,
+            uint256[] memory balances,
+            uint256 oldAmpPreJoinExitInvariant
+        ) = _payProtocolFeesBeforeJoinExit(registeredBalances, lastJoinExitAmp1, lastJoinExitAmp2, lastPostJoinExitInvariant);
+
+        // If the amplification factor is the same as it was during the last join/exit then we can reuse the
+        // value calculated using the "old" amplification factor. If not, then we have to calculate this now.
+        (uint256 currentAmp1, ) = _getAmplificationParameter1();
+        (uint256 currentAmp2, ) = _getAmplificationParameter2();
+        uint256 preJoinExitInvariant = (currentAmp1 == lastJoinExitAmp1 && currentAmp2 == lastJoinExitAmp2)
+            ? oldAmpPreJoinExitInvariant
+            : CustomMath._calculateInvariant(currentAmp1, currentAmp2, balances);
+
+        return BeforeJoinExitReturn(preJoinExitSupply, balances, currentAmp1, currentAmp2, preJoinExitInvariant);
+    }
+
+    /**
      * @dev Support single- and multi-token joins, but not explicit proportional joins.
      */
-    function _doJoin(PreCalcReturn memory r, uint256[] memory scalingFactors, bytes memory userData)
-        internal view returns (uint256, uint256[] memory) {
-        CustomPhantomPoolUserData.JoinKindPhantom kind = userData.joinKind();
-        if (kind == CustomPhantomPoolUserData.JoinKindPhantom.EXACT_TOKENS_IN_FOR_BPT_OUT) {
-            return
-                _joinExactTokensInForBPTOut(r, scalingFactors, userData);
-        } else if (kind == CustomPhantomPoolUserData.JoinKindPhantom.TOKEN_IN_FOR_EXACT_BPT_OUT) {
-            return
-                _joinTokenInForExactBPTOut(r, userData);
+
+    struct DoJoinParams {
+        uint256[] balances;
+        uint256 currentAmp1;
+        uint256 currentAmp2;
+        uint256 preJoinExitSupply;
+        uint256 preJoinExitInvariant;
+        uint256[] scalingFactors;
+    }
+
+    function _doJoin(DoJoinParams memory params, bytes memory userData) internal view returns (uint256, uint256[] memory) {
+        CustomPoolUserData.JoinKind kind = userData.joinKind();
+        if (kind == CustomPoolUserData.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT) {
+            return _joinExactTokensInForBPTOut(params, userData);
+        } else if (kind == CustomPoolUserData.JoinKind.TOKEN_IN_FOR_EXACT_BPT_OUT) {
+            return _joinTokenInForExactBPTOut(params, userData);
         } else {
             _revert(Errors.UNHANDLED_JOIN_KIND);
-            return (0, new uint256[](0)); // JP
         }
     }
 
     /**
      * @dev Multi-token join. Joins with proportional amounts will pay no protocol fees.
      */
-    function _joinExactTokensInForBPTOut(
-        PreCalcReturn memory r,
-        uint256[] memory scalingFactors,
-        bytes memory userData
-    ) private view returns (uint256, uint256[] memory) {
 
+//                        params.preJoinExitSupply,
+//                    params.preJoinExitInvariant,
+//                    params.currentAmp1,
+//                    params.currentAmp2,
+//                    params.balances,
+//                    params.scalingFactors,
+
+
+    function _joinExactTokensInForBPTOut(DoJoinParams memory params, bytes memory userData)
+    private view returns (uint256, uint256[] memory) {
         (uint256[] memory amountsIn, uint256 minBPTAmountOut) = userData.exactTokensInForBptOut();
-        InputHelpers.ensureInputLengthMatch(r.balancesWithoutBpt.length, amountsIn.length);
+        InputHelpers.ensureInputLengthMatch(params.balances.length, amountsIn.length);
 
         // The user-provided amountsIn is unscaled, so we address that.
-        _upscaleArray(amountsIn, _dropBptItem(scalingFactors));
+        _upscaleArray(amountsIn, _dropBptItem(params.scalingFactors));
 
         uint256 bptAmountOut = CustomMath._calcBptOutGivenExactTokensIn(
-            r.currentAmp1,
-            r.currentAmp2,
-            r.balancesWithoutBpt,
+            params.currentAmp1,
+            params.currentAmp2,
+            params.balances,
             amountsIn,
-            r.preJoinExitSupply, //virtualSupply JP
-            r.preJoinExitInvariant,
+            params.preJoinExitSupply, // = virtualSupply,
+            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -745,29 +792,34 @@ contract CustomPhantomPool is
     /**
      * @dev Single-token join, equivalent to swapping a pool token for BPT.
      */
-    function _joinTokenInForExactBPTOut(
-        PreCalcReturn memory r,
-        bytes memory userData
-    ) private view returns (uint256, uint256[] memory) {
+//                    params.preJoinExitSupply,
+//                params.preJoinExitInvariant,
+//                params.currentAmp1,
+//                params.currentAmp2,
+//                params.balances,
+
+
+    function _joinTokenInForExactBPTOut(DoJoinParams memory params, bytes memory userData)
+    private view returns (uint256, uint256[] memory) {
         // Since this index is sent in from the user, we interpret it as NOT including the BPT token.
-        (uint256 bptAmountOut, uint256 tokenIndexWithoutBpt) = userData.tokenInForExactBptOut();
+        (uint256 bptAmountOut, uint256 tokenIndex) = userData.tokenInForExactBptOut();
         // Note that there is no maximum amountIn parameter: this is handled by `IVault.joinPool`.
 
         // Balances are passed through from the Vault hook, and include BPT
-        _require(tokenIndexWithoutBpt < r.balancesWithoutBpt.length, Errors.OUT_OF_BOUNDS);
+        _require(tokenIndex < params.balances.length, Errors.OUT_OF_BOUNDS);
 
         // We join with a single token, so initialize amountsIn with zeros.
-        uint256[] memory amountsIn = new uint256[](r.balancesWithoutBpt.length);
+        uint256[] memory amountsIn = new uint256[](params.balances.length);
 
         // And then assign the result to the selected token.
-        amountsIn[tokenIndexWithoutBpt] = CustomMath._calcTokenInGivenExactBptOut(
-            r.currentAmp1,
-            r.currentAmp2,
-            r.balancesWithoutBpt,
-            tokenIndexWithoutBpt,
+        amountsIn[tokenIndex] = CustomMath._calcTokenInGivenExactBptOut(
+            params.currentAmp1,
+            params.currentAmp2,
+            params.balances,
+            tokenIndex,
             bptAmountOut,
-            r.preJoinExitSupply, // virtualSupply JP
-            r.preJoinExitInvariant,
+            params.preJoinExitSupply, // = virtualSupply,
+            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -780,45 +832,36 @@ contract CustomPhantomPool is
      * @dev Support single- and multi-token exits, but not explicit proportional exits, which are
      * supported through Recovery Mode.
      */
-    function _doExit(
-        PreCalcReturn memory r,
-        uint256[] memory scalingFactors,
-        bytes memory userData
-    ) internal view returns (uint256, uint256[] memory) {
-        CustomPhantomPoolUserData.ExitKindPhantom kind = userData.exitKind();
-        if (kind == CustomPhantomPoolUserData.ExitKindPhantom.BPT_IN_FOR_EXACT_TOKENS_OUT) {
-            return
-                _exitBPTInForExactTokensOut(r, scalingFactors, userData);
-        } else if (kind == CustomPhantomPoolUserData.ExitKindPhantom.EXACT_BPT_IN_FOR_ONE_TOKEN_OUT) {
-            return
-                _exitExactBPTInForTokenOut(r, userData);
+    function _doExit(DoJoinParams memory params, bytes memory userData) internal view returns (uint256, uint256[] memory) {
+        CustomPoolUserData.ExitKind kind = userData.exitKind();
+        if (kind == CustomPoolUserData.ExitKind.BPT_IN_FOR_EXACT_TOKENS_OUT) {
+            return _exitBPTInForExactTokensOut(params, userData);
+        } else if (kind == CustomPoolUserData.ExitKind.EXACT_BPT_IN_FOR_ONE_TOKEN_OUT) {
+            return _exitExactBPTInForTokenOut(params, userData);
         } else {
             _revert(Errors.UNHANDLED_EXIT_KIND);
-            return (0, new uint256[](0)); // JP
-       }
+        }
     }
 
     /**
      * @dev Multi-token exit. Proportional exits will pay no protocol fees.
      */
-    function _exitBPTInForExactTokensOut(
-        PreCalcReturn memory r,
-        uint256[] memory scalingFactors,
-        bytes memory userData
-    ) private view returns (uint256, uint256[] memory) {
+
+    function _exitBPTInForExactTokensOut(DoJoinParams memory params, bytes memory userData)
+    private view returns (uint256, uint256[] memory) {
         (uint256[] memory amountsOut, uint256 maxBPTAmountIn) = userData.bptInForExactTokensOut();
-        InputHelpers.ensureInputLengthMatch(amountsOut.length, r.balancesWithoutBpt.length);
+        InputHelpers.ensureInputLengthMatch(amountsOut.length, params.balances.length);
 
         // The user-provided amountsIn is unscaled, so we address that.
-        _upscaleArray(amountsOut, _dropBptItem(scalingFactors));
+        _upscaleArray(amountsOut, _dropBptItem(params.scalingFactors));
 
         uint256 bptAmountIn = CustomMath._calcBptInGivenExactTokensOut(
-            r.currentAmp1,
-            r.currentAmp2,
-            r.balancesWithoutBpt,
+            params.currentAmp1,
+            params.currentAmp2,
+            params.balances,
             amountsOut,
-            r.preJoinExitSupply, // virtualSupply,
-            r.preJoinExitInvariant,
+            params.preJoinExitSupply, // virtualSupply,
+            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
         _require(bptAmountIn <= maxBPTAmountIn, Errors.BPT_IN_MAX_AMOUNT);
@@ -829,28 +872,33 @@ contract CustomPhantomPool is
     /**
      * @dev Single-token exit, equivalent to swapping BPT for a pool token.
      */
-    function _exitExactBPTInForTokenOut(
-        PreCalcReturn memory r,
-        bytes memory userData
-    ) private view returns (uint256, uint256[] memory) {
+
+//    params.preJoinExitSupply, virtualSupply
+//                params.preJoinExitInvariant,
+//                params.currentAmp1,
+//                params.currentAmp2,
+//                params.balances,
+
+    function _exitExactBPTInForTokenOut(DoJoinParams memory params, bytes memory userData)
+    private view returns (uint256, uint256[] memory) {
         // Since this index is sent in from the user, we interpret it as NOT including the BPT token
-        (uint256 bptAmountIn, uint256 tokenIndexWithoutBpt) = userData.exactBptInForTokenOut();
+        (uint256 bptAmountIn, uint256 tokenIndex) = userData.exactBptInForTokenOut();
         // Note that there is no minimum amountOut parameter: this is handled by `IVault.exitPool`.
 
-        _require(tokenIndexWithoutBpt < r.balancesWithoutBpt.length, Errors.OUT_OF_BOUNDS);
+        _require(tokenIndex < params.balances.length, Errors.OUT_OF_BOUNDS);
 
         // We exit in a single token, so initialize amountsOut with zeros
-        uint256[] memory amountsOut = new uint256[](r.balancesWithoutBpt.length);
+        uint256[] memory amountsOut = new uint256[](params.balances.length);
 
         // And then assign the result to the selected token.
-        amountsOut[tokenIndexWithoutBpt] = CustomMath._calcTokenOutGivenExactBptIn(
-            r.currentAmp1,
-            r.currentAmp2,
-            r.balancesWithoutBpt,
-            tokenIndexWithoutBpt,
+        amountsOut[tokenIndex] = CustomMath._calcTokenOutGivenExactBptIn(
+            params.currentAmp1,
+            params.currentAmp2,
+            params.balances,
+            tokenIndex,
             bptAmountIn,
-            r.preJoinExitSupply, // virtualSupply,
-            r.preJoinExitInvariant,
+            params.preJoinExitSupply, // = virtualSupply,
+            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -861,61 +909,22 @@ contract CustomPhantomPool is
      * @dev We cannot use the default RecoveryMode implementation here, since we need to account for the BPT token.
      */
     function _doRecoveryModeExit(
-        uint256[] memory balances,
+        uint256[] memory registeredBalances,
         uint256,
         bytes memory userData
     ) internal virtual override returns (uint256, uint256[] memory) {
         // Since this Pool uses preminted BPT, we need to replace the total supply with the virtual total supply, and
         // adjust the balances array by removing BPT from it.
-        (uint256 virtualSupply, uint256[] memory balancesWithoutBpt) = _dropBptItemFromBalances(balances);
+        (uint256 virtualSupply, uint256[] memory balances) = _dropBptItemFromBalances(registeredBalances);
 
         (uint256 bptAmountIn, uint256[] memory amountsOut) = super._doRecoveryModeExit(
-            balancesWithoutBpt,
+            balances,
             virtualSupply,
             userData
         );
 
         // The vault requires an array including BPT, so add it back in here.
         return (bptAmountIn, _addBptItem(amountsOut, 0));
-    }
-
-    // Virtual Supply
-
-    /**
-     * @dev Returns the number of tokens in circulation.
-     *
-     * In other pools, this would be the same as `totalSupply`, but since this pool pre-mints BPT and holds it in the
-     * Vault as a token, we need to subtract the Vault's balance to get the total "circulating supply". Both the
-     * totalSupply and Vault balance can change. If users join or exit using swaps, some of the preminted BPT are
-     * exchanged, so the Vault's balance increases after joins and decreases after exits. If users call the regular
-     * joins/exit functions, the totalSupply can change as BPT are minted for joins or burned for exits.
-     */
-    function getVirtualSupply() external view returns (uint256) {
-        // For a 3 token General Pool, it is cheaper to query the balance for a single token than to read all balances,
-        // as getPoolTokenInfo will check for token existence, token balance and Asset Manager (3 reads), while
-        // getPoolTokens will read the number of tokens, their addresses and balances (7 reads).
-        // The more tokens the Pool has, the more expensive `getPoolTokens` becomes, while `getPoolTokenInfo`'s gas
-        // remains constant.
-        (uint256 cash, uint256 managed, , ) = getVault().getPoolTokenInfo(getPoolId(), IERC20(this));
-
-        // Note that unlike all other balances, the Vault's BPT balance does not need scaling as its scaling factor is
-        // ONE. This addition cannot overflow due to the Vault's balance limits.
-        return _getVirtualSupply(cash + managed);
-    }
-
-    // The initial amount of BPT pre-minted is _PREMINTED_TOKEN_BALANCE, and it goes entirely to the pool balance in the
-    // vault. So the virtualSupply (the actual supply in circulation) is defined as:
-    // virtualSupply = totalSupply() - _balances[_bptIndex]
-    function _getVirtualSupply(uint256 bptBalance) internal view returns (uint256) {
-        return totalSupply().sub(bptBalance);
-    }
-
-    /**
-     * @dev Same as `_dropBptItem` in CustomPoolStorage, except the virtual supply is also returned, and `balances`
-     * is assumed to be the current Pool balances.
-     */
-    function _dropBptItemFromBalances(uint256[] memory balances) internal view returns (uint256, uint256[] memory) {
-        return (_getVirtualSupply(balances[getBptIndex()]), _dropBptItem(balances));
     }
 
     // BPT rate
@@ -937,145 +946,6 @@ contract CustomPhantomPool is
         return CustomMath._getRate(balances, currentAmp1, currentAmp2, virtualSupply);
     }
 
-    // Protocol Fees
-
-    /**
-     * @dev Before joins or exits, calculate the invariant using the old rates for exempt tokens (i.e., the rates
-     * at the time of the previous join or exit), in order to exclude the yield from the calculation for those tokens.
-     * Calculate the (non-exempt) yield and swap fee growth separately, and apply the corresponding protocol fee
-     * percentage to each type.
-     */
-    function _payProtocolFeesBeforeJoinExit(uint256[] memory balances) private returns (uint256, uint256[] memory) {
-        // Apply the rate adjustment to exempt tokens: multiply by oldRate / currentRate to "undo" the current scaling,
-        // and apply the old rate. These functions copy `balances` to local storage, so they are not mutated and can
-        // be reused.
-
-        // Do not ignore the exempt flags when calculating total growth = swap fees + non-exempt token yield.
-        uint256[] memory totalGrowthBalances = _dropBptItem(_getAdjustedBalances(balances, false));
-        // Ignore the exempt flags to use the oldRate for all tokens, corresponding to the growth from swap fees alone.
-        uint256[] memory swapGrowthBalances = _dropBptItem(_getAdjustedBalances(balances, true));
-
-        // Charge the protocol fee in BPT, using the growth in invariant between _postJoinExitInvariant
-        // and adjusted versions of the current invariant. We have separate protocol fee percentages for growth based
-        // on yield and growth based on swap fees, so we need to compute each type separately.
-
-        // To convert each protocol fee to a BPT amount for each type of growth, we compute the relevant invariant
-        // growth ratio, extract the portion due the protocol, and then compute the equivalent amount of BPT that
-        // would cause such an increase.
-        //
-        // Invariant growth is related to new BPT and supply by: invariant ratio = (bpt amount + supply) / supply
-        // With some manipulation, this becomes:                 (invariant ratio - 1) * supply = bpt amount
-        //
-        // However, a part of the invariant growth was due to non-protocol swap fees (i.e. value accrued by the
-        // LPs), so we only mint a percentage of this BPT amount: that which corresponds to protocol fees.
-
-        uint256 postJoinExitAmp1 = _postJoinExitAmp1;
-        uint256 postJoinExitAmp2 = _postJoinExitAmp2;
-
-        uint256 totalGrowthInvariant = CustomMath._calculateInvariant(postJoinExitAmp1, postJoinExitAmp2, totalGrowthBalances);
-        uint256 swapGrowthInvariant  = CustomMath._calculateInvariant(postJoinExitAmp1, postJoinExitAmp2, swapGrowthBalances);
-
-        // Total Growth = Invariant with old rates for exempt tokens / last invariant: swap fees + token yields
-        // Swap Fee Growth = Invariant with old rates for all tokens / last invariant: swap fees alone
-        // Growth due to yield = Total Growth / Swap Fee Growth
-        //                     = Invariant with masked rates / Invariant with old rates.
-
-        // If the "growth" is negative, set the ratio to ONE: multiplying by (ratio - 1) will then result in zero fees.
-        uint256 yieldGrowthRatio = totalGrowthInvariant > swapGrowthInvariant
-            ? totalGrowthInvariant.divDown(swapGrowthInvariant)
-            : FixedPoint.ONE;
-
-        uint256 postJoinExitInvariant = _postJoinExitInvariant;
-
-        uint256 swapGrowthRatio = swapGrowthInvariant > postJoinExitInvariant
-            ? swapGrowthInvariant.divDown(postJoinExitInvariant)
-            : FixedPoint.ONE;
-
-        (uint256 virtualSupply, uint256[] memory balancesWithoutBpt) = _dropBptItemFromBalances(balances);
-
-        // Apply separate protocol fee rates on yield and swap fee growth.
-        // Total protocol fee rate = (FeeOnYield * (yieldGrowthRatio - 1) + FeeOnSwap * (swapGrowthRatio - 1))
-
-        // We round down, favoring LP fees.
-        uint256 protocolFeeAmount = getProtocolFeePercentageCache(ProtocolFeeType.YIELD)
-            .mulDown(yieldGrowthRatio.sub(FixedPoint.ONE))
-            .add(getProtocolFeePercentageCache(ProtocolFeeType.SWAP).mulDown(swapGrowthRatio.sub(FixedPoint.ONE)))
-            .mulDown(virtualSupply);
-
-        if (protocolFeeAmount > 0) {
-            _payProtocolFees(protocolFeeAmount);
-        }
-
-        // We pay fees before a join or exit to ensure the pool is debt-free, so that swap fee and quote calculations
-        // based on the virtual supply reflect only the current user's transaction. We have just increased the virtual
-        // supply by minting the protocol fee tokens, so those are included in the return value.
-        //
-        // For this addition to overflow, the actual total supply would have already overflowed.
-        return (virtualSupply + protocolFeeAmount, balancesWithoutBpt);
-    }
-
-    /**
-     * @dev Store the latest invariant based on the adjusted balances after the join or exit, using current rates.
-     * Also cache the amp factor, so that the invariant is not affected by amp updates between joins and exits.
-     */
-    function _updateInvariantAfterJoinExit(
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256[] memory balancesWithoutBpt,
-        uint256 preJoinExitInvariant,
-        uint256 preJoinExitSupply,
-        uint256 postJoinExitSupply
-    ) internal {
-        uint256 postJoinExitInvariant = CustomMath._calculateInvariant(currentAmp1, currentAmp2, balancesWithoutBpt);
-
-        // Compute the growth ratio between the pre- and post-join/exit balances.
-        // Note that the pre-join/exit invariant is *not* the invariant from the last join,
-        // but computed from the balances before this particular join/exit.
-
-        uint256 protocolSwapFeePercentage = getProtocolFeePercentageCache(ProtocolFeeType.SWAP);
-
-        if (protocolSwapFeePercentage > 0) {
-            uint256 invariantGrowthRatio = (
-                postJoinExitInvariant > preJoinExitInvariant
-                    ? postJoinExitInvariant.sub(preJoinExitInvariant)
-                    : preJoinExitInvariant.sub(postJoinExitInvariant)
-            )
-                .divDown(preJoinExitInvariant);
-
-            // Compute the bpt ratio
-            uint256 bptGrowthRatio = (
-                postJoinExitSupply > preJoinExitInvariant
-                    ? postJoinExitSupply.sub(preJoinExitSupply)
-                    : preJoinExitSupply.sub(postJoinExitSupply)
-            )
-                .divDown(preJoinExitSupply);
-
-            // The difference between the invariant growth and bpt increase rates must be due to the
-            // balance change from this join/exit.
-            // Protocol fees due = (invariant growth / bpt increase - 1) * virtual supply * protocol fee %
-            // For instance, if the invariant growth is 1.05, and the bpt increase is 1.0475, with 1000 supply,
-            // and a protocol fee of 50%, we would mint (1.05/1.0475 - 1) * 1000 * 0.5 = 1.193 BPT.
-
-            if (invariantGrowthRatio > bptGrowthRatio) {
-                uint256 protocolFeeAmount = invariantGrowthRatio
-                    .divDown(bptGrowthRatio)
-                    .sub(FixedPoint.ONE)
-                    .mulDown(preJoinExitSupply)
-                    .mulDown(protocolSwapFeePercentage);
-
-                _payProtocolFees(protocolFeeAmount);
-            }
-        }
-
-        // Update the stored invariant and amp values.
-        _postJoinExitAmp1 = currentAmp1;
-        _postJoinExitAmp2 = currentAmp2;
-        _postJoinExitInvariant = postJoinExitInvariant;
-
-        // Copy the current rates to the old rates.
-        _updateOldRates();
-    }
-
     // Helpers
 
     /**
@@ -1088,7 +958,10 @@ contract CustomPhantomPool is
         uint256[] memory arguments,
         function(uint256, uint256) pure returns (uint256) mutation
     ) private pure {
-        for (uint256 i = 0; i < toMutate.length; ++i) {
+        uint256 length = toMutate.length;
+        InputHelpers.ensureInputLengthMatch(length, arguments.length);
+
+        for (uint256 i = 0; i < length; ++i) {
             toMutate[i] = mutation(toMutate[i], arguments[i]);
         }
     }
@@ -1107,9 +980,9 @@ contract CustomPhantomPool is
             // Our inheritance pattern creates a small diamond that requires explicitly listing the parents here.
             // Each parent calls the `super` version, so linearization ensures all implementations are called.
             BasePool,
-            BasePoolAuthorization,
+            ComposableCustomPoolProtocolFees,
             CustomPoolAmplification,
-            CustomPoolRates
+            ComposableCustomPoolRates
         )
         returns (bool)
     {

@@ -11,8 +11,9 @@ import { ANY_ADDRESS, ZERO_ADDRESS } from '@balancer-labs/v2-helpers/src/constan
 import Token from '@balancer-labs/v2-helpers/src/models/tokens/Token';
 import TokenList from '@balancer-labs/v2-helpers/src/models/tokens/TokenList';
 import Vault from '@balancer-labs/v2-helpers/src/models/vault/Vault';
+import { every, range } from 'lodash';
 
-describe('CustomPoolStorage', () => {
+describe('ComposableCustomPoolStorage', () => {
   let admin: SignerWithAddress;
   let vault: Vault;
 
@@ -28,7 +29,7 @@ describe('CustomPoolStorage', () => {
     it('reverts', async () => {
       const tokens = await TokenList.create(1);
       await expect(
-        deploy('MockCustomPoolStorage', {
+        deploy('MockComposableCustomPoolStorage', {
           args: [vault.address, tokens.addresses, tokens.map(() => ZERO_ADDRESS), tokens.map(() => false)],
         })
       ).to.be.revertedWith('MIN_TOKENS');
@@ -55,7 +56,7 @@ describe('CustomPoolStorage', () => {
     it('reverts', async () => {
       const tokens = await TokenList.create(6, { sorted: true });
       await expect(
-        deploy('MockCustomPoolStorage', {
+        deploy('MockComposableCustomPoolStorage', {
           args: [vault.address, tokens.addresses, tokens.map(() => ZERO_ADDRESS), tokens.map(() => false)],
         })
       ).to.be.revertedWith('MAX_TOKENS');
@@ -90,7 +91,7 @@ describe('CustomPoolStorage', () => {
         newExemptFromYieldProtocolFeeFlags[i] = newRateProviders[i] !== ZERO_ADDRESS && isExempt;
       }
 
-      pool = await deploy('MockCustomPoolStorage', {
+      pool = await deploy('MockComposableCustomPoolStorage', {
         args: [vault.address, tokens.addresses, newRateProviders, newExemptFromYieldProtocolFeeFlags],
       });
       bptIndex = (await pool.getBptIndex()).toNumber();
@@ -109,18 +110,6 @@ describe('CustomPoolStorage', () => {
           const allTokens = new TokenList([...tokens.tokens, bpt]).sort();
           const expectedIndex = allTokens.indexOf(bpt);
           expect(await pool.getBptIndex()).to.be.equal(expectedIndex);
-        });
-
-        it('sets the tokens', async () => {
-          const bpt = await Token.deployedAt(pool);
-          const allTokens = new TokenList([...tokens.tokens, bpt]).sort();
-
-          const expectedTokenAddresses = Array.from({ length: 6 }, (_, i) => allTokens.addresses[i] ?? ZERO_ADDRESS);
-          await Promise.all(
-            expectedTokenAddresses.map(async (expectedTokenAddress, i) => {
-              expect(await pool[`getToken${i}`]()).to.be.eq(expectedTokenAddress);
-            })
-          );
         });
       });
 
@@ -147,7 +136,7 @@ describe('CustomPoolStorage', () => {
           const exemptionFlags = [true, true];
 
           await expect(
-            deploy('MockCustomPoolStorage', {
+            deploy('MockComposableCustomPoolStorage', {
               args: [vault.address, tokenAddresses, rateProviderAddresses, exemptionFlags],
             })
           ).to.be.revertedWith('TOKEN_DOES_NOT_HAVE_RATE_PROVIDER');
@@ -272,21 +261,21 @@ describe('CustomPoolStorage', () => {
       });
 
       describe('getRateProvider', () => {
-        context('when called with a registered token', () => {
-          it('returns the rate provider for the provided token', async () => {
+        context('when called with a valid index', () => {
+          it('returns the rate provider for the token at the provided index', async () => {
             const bpt = await Token.deployedAt(pool);
 
             const registeredTokens = new TokenList([...tokens.tokens, bpt]).sort();
             const expectedRateProviders = rateProviders.slice();
             expectedRateProviders.splice(bptIndex, 0, ZERO_ADDRESS);
 
-            for (const [index, token] of registeredTokens.addresses.entries()) {
-              expect(await pool.getRateProvider(token)).to.be.eq(expectedRateProviders[index]);
+            for (let index = 0; index < registeredTokens.length; index++) {
+              expect(await pool.getRateProvider(index)).to.be.eq(expectedRateProviders[index]);
             }
           });
         });
 
-        context('when called with a non-registered token', () => {
+        context('when called with an invalid index', () => {
           it('reverts', async () => {
             const nonRegisteredToken = ANY_ADDRESS;
             await expect(pool.getRateProvider(nonRegisteredToken)).to.be.revertedWith('INVALID_TOKEN');
@@ -336,6 +325,80 @@ describe('CustomPoolStorage', () => {
 
             expect(await pool.isTokenExemptFromYieldProtocolFee(token.address)).to.equal(expectedFlag);
           }
+        });
+      });
+
+      describe('global exemption flags', () => {
+        // These tests use a different Pool from the rest since they deploy it with non-random and controlled arguments.
+        let exemptionPool: Contract;
+
+        enum Exemption {
+          NONE,
+          SOME,
+          ALL,
+        }
+
+        function deployExemptionPool(exemption: Exemption) {
+          sharedBeforeEach(async () => {
+            const rateProviders = await Promise.all(
+              range(numberOfTokens).map(async () => (await deploy('v2-pool-utils/MockRateProvider')).address)
+            );
+
+            let exemptionFlags;
+            if (exemption == Exemption.NONE) {
+              exemptionFlags = Array(numberOfTokens).fill(false);
+            } else if (exemption == Exemption.ALL) {
+              exemptionFlags = Array(numberOfTokens).fill(true);
+            } else {
+              exemptionFlags = range(numberOfTokens).map(() => Math.random() < 0.5);
+
+              if (every(exemptionFlags, (flag) => flag == false)) {
+                exemptionFlags[0] = true;
+              } else if (every(exemptionFlags, (flag) => flag == true)) {
+                exemptionFlags[0] = false;
+              }
+            }
+
+            exemptionPool = await deploy('MockComposableCustomPoolStorage', {
+              args: [vault.address, tokens.addresses, rateProviders, exemptionFlags],
+            });
+          });
+        }
+
+        context('when no token is exempt', () => {
+          deployExemptionPool(Exemption.NONE);
+
+          it('areAllTokensExempt returns false', async () => {
+            expect(await exemptionPool.areAllTokensExempt()).to.equal(false);
+          });
+
+          it('areNoTokensExempt returns true', async () => {
+            expect(await exemptionPool.areNoTokensExempt()).to.equal(true);
+          });
+        });
+
+        context('when all tokens are exempt', () => {
+          deployExemptionPool(Exemption.ALL);
+
+          it('areAllTokensExempt returns true', async () => {
+            expect(await exemptionPool.areAllTokensExempt()).to.equal(true);
+          });
+
+          it('areNoTokensExempt returns false', async () => {
+            expect(await exemptionPool.areNoTokensExempt()).to.equal(false);
+          });
+        });
+
+        context('when some (but not all) tokens are exempt', () => {
+          deployExemptionPool(Exemption.SOME);
+
+          it('areAllTokensExempt returns false', async () => {
+            expect(await exemptionPool.areAllTokensExempt()).to.equal(false);
+          });
+
+          it('areNoTokensExempt returns false', async () => {
+            expect(await exemptionPool.areNoTokensExempt()).to.equal(false);
+          });
         });
       });
     });
