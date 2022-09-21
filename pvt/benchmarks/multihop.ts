@@ -3,7 +3,7 @@ import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-wit
 import { FundManagement, SwapKind } from '@balancer-labs/balancer-js';
 import { MAX_INT256, MAX_UINT256 } from '@balancer-labs/v2-helpers/src/constants';
 import { getTokensSwaps } from '@balancer-labs/v2-helpers/src/models/vault/swaps';
-import { getWeightedPool, getStablePool, setupEnvironment } from './misc';
+import { getWeightedPool, getStablePool, getCustomPool, setupEnvironment } from './misc';
 import { fp, printGas } from '@balancer-labs/v2-helpers/src/numbers';
 import Vault from '@balancer-labs/v2-helpers/src/models/vault/Vault';
 import TokenList from '@balancer-labs/v2-helpers/src/models/tokens/TokenList';
@@ -48,6 +48,19 @@ async function main() {
 
   await multihop((index: number) => getStablePool(vault, tokens, 4, index), false);
   await multihop((index: number) => getStablePool(vault, tokens, 4, index), true);
+
+  console.log(`\n# Custom Pool with 2 tokens`);
+
+  await multihop((index: number) => getCustomPool(vault, tokens, 2, index), false);
+  await multihop((index: number) => getCustomPool(vault, tokens, 2, index), true);
+
+  console.log(`\n# Custom Pool with 4 tokens`);
+
+  await multihop((index: number) => getCustomPool(vault, tokens, 4, index), false);
+  await multihop((index: number) => getCustomPool(vault, tokens, 4, index), true);
+
+
+
 }
 
 async function multihop(getPool: (index: number) => Promise<string>, useInternalBalance: boolean) {

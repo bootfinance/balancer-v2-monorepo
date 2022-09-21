@@ -5,7 +5,7 @@ import { MAX_INT256, MAX_UINT256 } from '@balancer-labs/v2-helpers/src/constants
 import TokenList from '@balancer-labs/v2-helpers/src/models/tokens/TokenList';
 import Vault from '@balancer-labs/v2-helpers/src/models/vault/Vault';
 import { getTokensSwaps } from '@balancer-labs/v2-helpers/src/models/vault/swaps';
-import { getWeightedPool, getStablePool, setupEnvironment } from './misc';
+import { getWeightedPool, getStablePool, getCustomPool, setupEnvironment } from './misc';
 import { FundManagement, SwapKind } from '@balancer-labs/balancer-js';
 
 let vault: Vault;
@@ -49,6 +49,18 @@ async function main() {
 
   await singlePair(() => getStablePool(vault, tokens, 4), false);
   await singlePair(() => getStablePool(vault, tokens, 4), true);
+
+
+  console.log(`\n# Custom Pools with 2 tokens`);
+
+  await singlePair(() => getCustomPool(vault, tokens, 2), false);
+  await singlePair(() => getCustomPool(vault, tokens, 2), true);
+
+  console.log(`\n# Custom Pools with 4 tokens`);
+
+  await singlePair(() => getCustomPool(vault, tokens, 4), false);
+  await singlePair(() => getCustomPool(vault, tokens, 4), true);
+
 }
 
 async function singlePair(getPoolId: () => Promise<string>, useInternalBalance: boolean) {

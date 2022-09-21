@@ -6,7 +6,7 @@ import { fp } from '@balancer-labs/v2-helpers/src/numbers';
 import { deploy, deployedAt } from '@balancer-labs/v2-helpers/src/contract';
 import TokenList from '@balancer-labs/v2-helpers/src/models/tokens/TokenList';
 import Vault from '@balancer-labs/v2-helpers/src/models/vault/Vault';
-import { StablePoolEncoder, toNormalizedWeights, WeightedPoolEncoder } from '@balancer-labs/balancer-js';
+import { StablePoolEncoder, CustomPoolEncoder, toNormalizedWeights, WeightedPoolEncoder } from '@balancer-labs/balancer-js';
 import { MAX_UINT256, ZERO_ADDRESS, MAX_WEIGHTED_TOKENS } from '@balancer-labs/v2-helpers/src/constants';
 import { bn } from '@balancer-labs/v2-helpers/src/numbers';
 import { advanceTime, MONTH, DAY } from '@balancer-labs/v2-helpers/src/time';
@@ -127,7 +127,7 @@ export async function deployPool(vault: Vault, tokens: TokenList, poolName: Pool
     });
 
     joinUserData = WeightedPoolEncoder.joinInit(tokens.map(() => initialPoolBalance));
-  } else if (poolName == 'ComposableStablePool') {
+  } else if (poolName == 'ComposableStablePool' || poolName == 'ComposableCustomPool') {
     const amplificationParameter = bn(50);
 
     const rateProviders = Array(tokens.length).fill(ZERO_ADDRESS);
@@ -149,6 +149,7 @@ export async function deployPool(vault: Vault, tokens: TokenList, poolName: Pool
     throw new Error(`Unhandled pool: ${poolName}`);
   }
 
+  // JP TODO: fix this
   const poolId = await pool.getPoolId();
   const { tokens: allTokens } = await vault.getPoolTokens(poolId);
   const initialBalances = allTokens.map((t) => (t == pool.address ? 0 : initialPoolBalance));
@@ -177,6 +178,10 @@ export async function getStablePool(vault: Vault, tokens: TokenList, size: numbe
   return deployPool(vault, tokens.subset(size, offset), 'ComposableStablePool');
 }
 
+export async function getCustomPool(vault: Vault, tokens: TokenList, size: number, offset?: number): Promise<string> {
+  return deployPool(vault, tokens.subset(size, offset), 'ComposableCustomPool');
+}
+
 export function pickTokenAddresses(tokens: TokenList, size: number, offset?: number): string[] {
   return tokens.subset(size, offset).addresses;
 }
@@ -192,14 +197,29 @@ export async function getSigners(): Promise<{
   return { admin, creator, trader, others };
 }
 
-type PoolName = 'WeightedPool' | 'ComposableStablePool' | 'ManagedPool';
+type PoolName = 'WeightedPool' | 'ComposableStablePool' | 'ComposableCustomPool' | 'ManagedPool';
 
 async function deployPoolFromFactory(
   vault: Vault,
   poolName: PoolName,
   args: { from: SignerWithAddress; parameters: Array<unknown> }
 ): Promise<Contract> {
-  const fullName = `${poolName == 'ComposableStablePool' ? 'v2-pool-stable' : 'v2-pool-weighted'}/${poolName}`;
+  //  const fullName = `${poolName == 'ComposableStablePool' ? 'v2-pool-stable' : 'v2-pool-weighted'}/${poolName}`;
+  switch (poolName) {
+      case 'ComposableStablePool': {
+       const fullName = `${'v2-pool-stable'}/${poolName}`;
+       break;
+      }
+      case 'ComposableCustomPool': {
+       const fullName = `${'v2-pool-custom'}/${poolName}`;
+       break;
+      }
+      default: {
+       const fullName = `${'v2-pool-weighted'/${poolName}`;
+       break;
+      }
+  }
+
   let factory: Contract;
 
   if (poolName == 'ManagedPool') {
@@ -208,6 +228,8 @@ async function deployPoolFromFactory(
     });
     factory = await deploy(`${fullName}Factory`, { args: [baseFactory.address] });
   } else if (poolName == 'ComposableStablePool') {
+    factory = await deploy(`${fullName}Factory`, { args: [vault.address, vault.getFeesProvider().address] });
+  } else if (poolName == 'ComposableCustomPool') {
     factory = await deploy(`${fullName}Factory`, { args: [vault.address, vault.getFeesProvider().address] });
   } else {
     factory = await deploy(`${fullName}Factory`, { args: [vault.address, vault.getFeesProvider().address] });

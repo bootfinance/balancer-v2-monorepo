@@ -6,8 +6,8 @@ import { bn, printGas } from '@balancer-labs/v2-helpers/src/numbers';
 import TokenList from '@balancer-labs/v2-helpers/src/models/tokens/TokenList';
 import Vault from '@balancer-labs/v2-helpers/src/models/vault/Vault';
 import { MAX_UINT256 } from '@balancer-labs/v2-helpers/src/constants';
-import { setupEnvironment, getWeightedPool, getStablePool, pickTokenAddresses } from './misc';
-import { WeightedPoolEncoder, StablePoolEncoder } from '@balancer-labs/balancer-js';
+import { setupEnvironment, getWeightedPool, getStablePool, getCustomPool, pickTokenAddresses } from './misc';
+import { WeightedPoolEncoder, StablePoolEncoder, CustomPoolEncoder} from '@balancer-labs/balancer-js';
 import { deployedAt } from '@balancer-labs/v2-helpers/src/contract';
 import { poolConfigs } from './config';
 
@@ -81,6 +81,14 @@ async function main() {
   }
   console.log('\n');
 
+  // numTokens is the size of the pool: 2,4
+  // Custom have a max of 5
+  for (let numTokens = 2; numTokens <= 4; numTokens += 2) {
+    printTokens('Custom pool', numTokens);
+    await joinAndExitCustomPool(() => getCustomPool(vault, tokens, numTokens), true);
+  }
+  console.log('\n');
+
   console.log(`#With user balance\n`);
 
   // numTokens is the size of the pool: 2,4,6,8,...
@@ -123,6 +131,14 @@ async function main() {
   for (let numTokens = 2; numTokens <= 4; numTokens += 2) {
     printTokens('Stable pool', numTokens);
     await joinAndExitStablePool(() => getStablePool(vault, tokens, numTokens), false);
+  }
+  console.log('\n');
+
+  // numTokens is the size of the pool: 2,4
+  // Custom have a max of 5
+  for (let numTokens = 2; numTokens <= 4; numTokens += 2) {
+    printTokens('Custom pool', numTokens);
+    await joinAndExitCustomPool(() => getSCustomPool(vault, tokens, numTokens), false);
   }
   console.log('\n');
 
@@ -171,6 +187,13 @@ async function main() {
     printTokens('Stable pool', numTokens);
     await joinAndExitStablePool(() => getStablePool(vault, tokens, numTokens), true, numberJoinsExits);
   }
+
+  console.log('\n');
+
+  for (let numTokens = 2; numTokens <= 4; numTokens += 2) {
+    printTokens('Custom pool', numTokens);
+    await joinAndExitCustomPool(() => getCustomPool(vault, tokens, numTokens), true, numberJoinsExits);
+  }
   console.log('\n');
 
   console.log(`#With user balance\n`);
@@ -215,6 +238,12 @@ async function main() {
   for (let numTokens = 2; numTokens <= 4; numTokens += 2) {
     printTokens('Stable pool', numTokens);
     await joinAndExitStablePool(() => getStablePool(vault, tokens, numTokens), false, numberJoinsExits);
+  }
+
+  console.log('\n');
+  for (let numTokens = 2; numTokens <= 4; numTokens += 2) {
+    printTokens('Custom pool', numTokens);
+    await joinAndExitCustomPool(() => getCustomPool(vault, tokens, numTokens), false, numberJoinsExits);
   }
 }
 
@@ -276,6 +305,37 @@ async function joinAndExitStablePool(getPoolId: () => Promise<string>, transferT
 
   await joinAndExitInternal(poolId, pool, stageIdx, joinRequest, exitRequest);
 }
+
+async function joinAndExitCustomPool(getPoolId: () => Promise<string>, transferTokens: boolean, stageIdx = 1) {
+  const poolId: string = await getPoolId();
+
+  const { address: poolAddress } = await vault.getPool(poolId);
+  const pool: Contract = await deployedAt('v2-pool-custom/ComposableCustomPool', poolAddress);
+
+  const { tokens: allTokens } = await vault.getPoolTokens(poolId);
+
+  const bptIndex = allTokens.indexOf(pool.address);
+  const tokenIndex = bptIndex == 0 ? 1 : 0;
+
+  const joinData = CustomPoolEncoder.joinTokenInForExactBPTOut(BPTAmount, tokenIndex);
+  const exitData = CustomPoolEncoder.exitExactBPTInForOneTokenOut(BPTAmount, tokenIndex);
+
+  const joinRequest = {
+    assets: allTokens,
+    maxAmountsIn: Array(allTokens.length).fill(MAX_UINT256),
+    userData: joinData,
+    fromInternalBalance: !transferTokens,
+  };
+  const exitRequest = {
+    assets: allTokens,
+    minAmountsOut: Array(allTokens.length).fill(0),
+    userData: exitData,
+    fromInternalBalance: !transferTokens,
+  };
+
+  await joinAndExitInternal(poolId, pool, stageIdx, joinRequest, exitRequest);
+}
+
 
 async function joinAndExitInternal(
   poolId: string,
