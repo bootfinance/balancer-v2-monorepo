@@ -10,6 +10,7 @@ import { Account } from './types';
 import { RawVaultDeployment, VaultDeployment } from '../vault/types';
 import { RawLinearPoolDeployment, LinearPoolDeployment } from '../pools/linear/types';
 import { RawStablePoolDeployment, StablePoolDeployment } from '../pools/stable/types';
+import { RawCustomPoolDeployment, CustomPoolDeployment } from '../pools/custom/types';
 import {
   RawWeightedPoolDeployment,
   WeightedPoolDeployment,
@@ -128,6 +129,40 @@ export default {
   },
 
   toStablePoolDeployment(params: RawStablePoolDeployment): StablePoolDeployment {
+    let {
+      tokens,
+      rateProviders,
+      tokenRateCacheDurations,
+      exemptFromYieldProtocolFeeFlags,
+      amplificationParameter,
+      swapFeePercentage,
+      pauseWindowDuration,
+      bufferPeriodDuration,
+    } = params;
+
+    if (!tokens) tokens = new TokenList();
+    if (!rateProviders) rateProviders = Array(tokens.length).fill(ZERO_ADDRESS);
+    if (!tokenRateCacheDurations) tokenRateCacheDurations = Array(tokens.length).fill(DAY);
+    if (!amplificationParameter) amplificationParameter = bn(200);
+    if (!swapFeePercentage) swapFeePercentage = bn(1e12);
+    if (!pauseWindowDuration) pauseWindowDuration = 3 * MONTH;
+    if (!bufferPeriodDuration) bufferPeriodDuration = MONTH;
+    if (!exemptFromYieldProtocolFeeFlags) exemptFromYieldProtocolFeeFlags = Array(tokens.length).fill(false);
+
+    return {
+      tokens,
+      rateProviders,
+      tokenRateCacheDurations,
+      exemptFromYieldProtocolFeeFlags,
+      amplificationParameter,
+      swapFeePercentage,
+      pauseWindowDuration,
+      bufferPeriodDuration,
+      owner: params.owner,
+    };
+  },
+
+  toCustomPoolDeployment(params: RawCustomPoolDeployment): CustomPoolDeployment {
     let {
       tokens,
       rateProviders,
