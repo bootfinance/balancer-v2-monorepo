@@ -162,6 +162,7 @@ describe('ComposableCustomPoolProtocolFees', () => {
 
           const expectedSwapFeeGrowthInvariant = calculateInvariant(
             oldRateBalances,
+            AMPLIFICATION_FACTOR.div(AMPLIFICATION_PRECISION),
             AMPLIFICATION_FACTOR.div(AMPLIFICATION_PRECISION)
           );
 
@@ -180,6 +181,7 @@ describe('ComposableCustomPoolProtocolFees', () => {
 
           const expectedTotalNonExemptGrowthInvariant = calculateInvariant(
             yieldNonExemptBalances,
+            AMPLIFICATION_FACTOR.div(AMPLIFICATION_PRECISION),
             AMPLIFICATION_FACTOR.div(AMPLIFICATION_PRECISION)
           );
 
@@ -193,6 +195,7 @@ describe('ComposableCustomPoolProtocolFees', () => {
         it('computes the total growth invariant correctly', async () => {
           const expectedTotalGrowthInvariant = calculateInvariant(
             balances,
+            AMPLIFICATION_FACTOR.div(AMPLIFICATION_PRECISION),
             AMPLIFICATION_FACTOR.div(AMPLIFICATION_PRECISION)
           );
           const { totalGrowthInvariant } = await pool.getGrowthInvariants(balances, AMPLIFICATION_FACTOR);

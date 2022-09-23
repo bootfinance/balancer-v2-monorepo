@@ -46,7 +46,8 @@ import { currentTimestamp, DAY } from '../../../time';
 const PREMINTED_BPT = MAX_UINT112.div(2);
 
 export default class CustomPool extends BasePool {
-  amplificationParameter: BigNumberish;
+  amplificationParameter1: BigNumberish;
+  amplificationParameter2: BigNumberish;
   bptIndex: number;
 
   static async create(params: RawCustomPoolDeployment = {}): Promise<CustomPool> {
@@ -60,12 +61,14 @@ export default class CustomPool extends BasePool {
     tokens: TokenList,
     bptIndex: BigNumber,
     swapFeePercentage: BigNumberish,
-    amplificationParameter: BigNumberish,
+    amplificationParameter1: BigNumberish,
+    amplificationParameter2: BigNumberish,
     owner?: SignerWithAddress
   ) {
     super(instance, poolId, vault, tokens, swapFeePercentage, owner);
 
-    this.amplificationParameter = amplificationParameter;
+    this.amplificationParameter1 = amplificationParameter1;
+    this.amplificationParameter2 = amplificationParameter2;
     this.bptIndex = bptIndex.toNumber();
   }
 
@@ -89,8 +92,12 @@ export default class CustomPool extends BasePool {
     return this.instance.getDueProtocolFeeBptAmount();
   }
 
-  async getAmplificationParameter(): Promise<{ value: BigNumber; isUpdating: boolean; precision: BigNumber }> {
-    return this.instance.getAmplificationParameter();
+  async getAmplificationParameter1(): Promise<{ value1: BigNumber; isUpdating1: boolean; precision1: BigNumber }> {
+    return this.instance.getAmplificationParameter1();
+  }
+
+  async getAmplificationParameter2(): Promise<{ value2: BigNumber; isUpdating2: boolean; precision2: BigNumber }> {
+    return this.instance.getAmplificationParameter2();
   }
 
   async getBptIndex(): Promise<number> {
@@ -134,7 +141,7 @@ export default class CustomPool extends BasePool {
     return pool.setTokenRateCacheDuration(token.address, duration);
   }
 
-  async startAmpChange(
+  async startAmp1Change(
     newAmp: BigNumberish,
     endTime?: BigNumberish,
     txParams: TxParams = {}
@@ -142,44 +149,66 @@ export default class CustomPool extends BasePool {
     const sender = txParams.from || this.owner;
     const pool = sender ? this.instance.connect(sender) : this.instance;
     if (!endTime) endTime = (await currentTimestamp()).add(2 * DAY);
-    return pool.startAmplificationParameterUpdate(newAmp, endTime);
+    return pool.startAmplificationParameter1Update(newAmp, endTime);
   }
 
-  async stopAmpChange(txParams: TxParams = {}): Promise<ContractTransaction> {
+  async startAmp2Change(
+    newAmp: BigNumberish,
+    endTime?: BigNumberish,
+    txParams: TxParams = {}
+  ): Promise<ContractTransaction> {
     const sender = txParams.from || this.owner;
     const pool = sender ? this.instance.connect(sender) : this.instance;
-    return pool.stopAmplificationParameterUpdate();
+    if (!endTime) endTime = (await currentTimestamp()).add(2 * DAY);
+    return pool.startAmplificationParameter2Update(newAmp, endTime);
+  }
+
+  async stopAmp1Change(txParams: TxParams = {}): Promise<ContractTransaction> {
+    const sender = txParams.from || this.owner;
+    const pool = sender ? this.instance.connect(sender) : this.instance;
+    return pool.stopAmplificationParameter1Update();
+  }
+
+  async stopAmp2Change(txParams: TxParams = {}): Promise<ContractTransaction> {
+    const sender = txParams.from || this.owner;
+    const pool = sender ? this.instance.connect(sender) : this.instance;
+    return pool.stopAmplificationParameter2Update();
   }
 
   async estimateInvariant(currentBalances?: BigNumberish[]): Promise<BigNumber> {
     if (!currentBalances) currentBalances = await this.getBalances();
-    return calculateInvariant(await this._dropBptItem(currentBalances), this.amplificationParameter);
+    return calculateInvariant(await this._dropBptItem(currentBalances), this.amplificationParameter1, this.amplificationParameter2);
   }
 
   async estimateTokenOutGivenTokenIn(tokenIn: Token, tokenOut: Token, amountIn: BigNumberish): Promise<BigNumberish> {
     const indexIn = this._skipBptIndex(await this.getTokenIndex(tokenIn));
     const indexOut = this._skipBptIndex(await this.getTokenIndex(tokenOut));
     const currentBalances = await this._dropBptItem(await this.getBalances());
-    return bn(calcOutGivenIn(currentBalances, this.amplificationParameter, indexIn, indexOut, amountIn));
+    return bn(calcOutGivenIn(
+        currentBalances,
+        this.amplificationParameter1,
+        this.amplificationParameter2,
+        indexIn, indexOut, amountIn));
   }
 
   async estimateTokenInGivenTokenOut(tokenIn: Token, tokenOut: Token, amountOut: BigNumberish): Promise<BigNumberish> {
     const indexIn = this._skipBptIndex(await this.getTokenIndex(tokenIn));
     const indexOut = this._skipBptIndex(await this.getTokenIndex(tokenOut));
     const currentBalances = await this._dropBptItem(await this.getBalances());
-    return bn(calcInGivenOut(currentBalances, this.amplificationParameter, indexIn, indexOut, amountOut));
+    return bn(calcInGivenOut(currentBalances, this.amplificationParameter1, this.amplificationParameter2, indexIn, indexOut, amountOut));
   }
 
   async estimateTokenOutGivenBptIn(token: Token, bptIn: BigNumberish): Promise<BigNumberish> {
     const tokenIndex = this._skipBptIndex(await this.getTokenIndex(token));
     const virtualSupply = await this.virtualTotalSupply();
     const currentBalances = await this._dropBptItem(await this.getBalances());
-    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter);
+    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter1, this.amplificationParameter2);
 
     return calcTokenOutGivenExactBptIn(
       tokenIndex,
       currentBalances,
-      this.amplificationParameter,
+      this.amplificationParameter1,
+      this.amplificationParameter2,
       bptIn,
       virtualSupply,
       currentInvariant,
@@ -191,12 +220,13 @@ export default class CustomPool extends BasePool {
     const tokenIndex = this._skipBptIndex(await this.getTokenIndex(token));
     const virtualSupply = await this.virtualTotalSupply();
     const currentBalances = await this._dropBptItem(await this.getBalances());
-    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter);
+    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter1, this.amplificationParameter2);
 
     return calcTokenInGivenExactBptOut(
       tokenIndex,
       currentBalances,
-      this.amplificationParameter,
+      this.amplificationParameter1,
+      this.amplificationParameter2,
       bptOut,
       virtualSupply,
       currentInvariant,
@@ -209,11 +239,12 @@ export default class CustomPool extends BasePool {
     const virtualSupply = await this.virtualTotalSupply();
     const currentBalances = await this._dropBptItem(await this.getBalances());
     const amountsIn = Array.from({ length: currentBalances.length }, (_, i) => (i == tokenIndex ? amountIn : 0));
-    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter);
+    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter1, this.amplificationParameter2);
 
     return calcBptOutGivenExactTokensIn(
       currentBalances,
-      this.amplificationParameter,
+      this.amplificationParameter1,
+      this.amplificationParameter2,
       amountsIn,
       virtualSupply,
       currentInvariant,
@@ -226,11 +257,12 @@ export default class CustomPool extends BasePool {
     const virtualSupply = await this.virtualTotalSupply();
     const currentBalances = await this._dropBptItem(await this.getBalances());
     const amountsOut = Array.from({ length: currentBalances.length }, (_, i) => (i == tokenIndex ? amountOut : 0));
-    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter);
+    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter1, this.amplificationParameter2);
 
     return calcBptInGivenExactTokensOut(
       currentBalances,
-      this.amplificationParameter,
+      this.amplificationParameter1,
+      this.amplificationParameter2,
       amountsOut,
       virtualSupply,
       currentInvariant,
@@ -254,11 +286,12 @@ export default class CustomPool extends BasePool {
     if (amountsIn.length == tokenCountWithBpt) {
       amountsIn = await this._dropBptItem(amountsIn);
     }
-    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter);
+    const currentInvariant = calculateInvariant(currentBalances, this.amplificationParameter1, this.amplificationParameter2);
 
     return calcBptOutGivenExactTokensIn(
       currentBalances,
-      this.amplificationParameter,
+      this.amplificationParameter1,
+      this.amplificationParameter2,
       amountsIn,
       supply,
       currentInvariant,

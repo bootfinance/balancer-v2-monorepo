@@ -168,7 +168,8 @@ export default {
       rateProviders,
       tokenRateCacheDurations,
       exemptFromYieldProtocolFeeFlags,
-      amplificationParameter,
+      amplificationParameter1,
+      amplificationParameter2,
       swapFeePercentage,
       pauseWindowDuration,
       bufferPeriodDuration,
@@ -177,7 +178,8 @@ export default {
     if (!tokens) tokens = new TokenList();
     if (!rateProviders) rateProviders = Array(tokens.length).fill(ZERO_ADDRESS);
     if (!tokenRateCacheDurations) tokenRateCacheDurations = Array(tokens.length).fill(DAY);
-    if (!amplificationParameter) amplificationParameter = bn(200);
+    if (!amplificationParameter1) amplificationParameter1 = bn(200);
+    if (!amplificationParameter2) amplificationParameter2 = bn(200);
     if (!swapFeePercentage) swapFeePercentage = bn(1e12);
     if (!pauseWindowDuration) pauseWindowDuration = 3 * MONTH;
     if (!bufferPeriodDuration) bufferPeriodDuration = MONTH;
@@ -188,7 +190,8 @@ export default {
       rateProviders,
       tokenRateCacheDurations,
       exemptFromYieldProtocolFeeFlags,
-      amplificationParameter,
+      amplificationParameter1,
+      amplificationParameter2,
       swapFeePercentage,
       pauseWindowDuration,
       bufferPeriodDuration,

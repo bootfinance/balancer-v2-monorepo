@@ -106,7 +106,10 @@ describe('ComposableCustomPool', () => {
         const tokenRates = Array.from({ length: numberOfTokens }, (_, i) => fp(1 + (i + 1) / 10));
 
         sharedBeforeEach('deploy pool', async () => {
-          await deployPool({ swapFeePercentage, amplificationParameter: AMPLIFICATION_PARAMETER }, tokenRates);
+          await deployPool({ swapFeePercentage,
+            amplificationParameter1: AMPLIFICATION_PARAMETER,
+            amplificationParameter2: AMPLIFICATION_PARAMETER
+          }, tokenRates);
         });
 
         it('sets the name', async () => {
@@ -371,16 +374,21 @@ describe('ComposableCustomPool', () => {
         });
 
         it('returns the current amp factor', async () => {
-          const { value: expectedAmp } = await pool.getAmplificationParameter();
-          const { currentAmp } = await pool.instance.callStatic.beforeJoinExit(registeredBalances);
-          expect(currentAmp).to.be.deep.eq(expectedAmp);
+          const { value1: expectedAmp1 } = await pool.getAmplificationParameter1();
+          const { value2: expectedAmp2 } = await pool.getAmplificationParameter2();
+          // TODO: Check me. -JP
+          const { currentAmp1, currentAmp2 } = await pool.instance.callStatic.beforeJoinExit(registeredBalances);
+          expect(currentAmp1).to.be.deep.eq(expectedAmp1);
+          expect(currentAmp2).to.be.deep.eq(expectedAmp2);
         });
 
         it('returns the pre-join invariant', async () => {
-          const { value, precision } = await pool.getAmplificationParameter();
+          const { value1, isUpdating1, precision1 } = await pool.getAmplificationParameter1();
+          const { value2, isUpdating2, precision2 } = await pool.getAmplificationParameter2();
           const expectedInvariant = calculateInvariant(
             registeredBalances.filter((_, i) => i !== bptIndex),
-            value.div(precision)
+            value1.div(precision1),
+            value2.div(precision2)
           );
 
           const { preJoinExitInvariant } = await pool.instance.callStatic.beforeJoinExit(registeredBalances);
@@ -399,7 +407,8 @@ describe('ComposableCustomPool', () => {
       context('when the amplification factor has changed from the last join/exit', () => {
         context('when the amplification factor update is ongoing', () => {
           sharedBeforeEach('perform an amp update', async () => {
-            await pool.startAmpChange(AMPLIFICATION_PARAMETER.mul(2), (await currentTimestamp()).add(2 * DAY));
+            await pool.startAmp1Change(AMPLIFICATION_PARAMETER.mul(2), (await currentTimestamp()).add(2 * DAY));
+            await pool.startAmp2Change(AMPLIFICATION_PARAMETER.mul(2), (await currentTimestamp()).add(2 * DAY));
             await advanceTime(DAY);
           });
 
@@ -408,7 +417,8 @@ describe('ComposableCustomPool', () => {
 
         context('when the amplification factor update has finished', () => {
           sharedBeforeEach('perform an amp update', async () => {
-            await pool.startAmpChange(AMPLIFICATION_PARAMETER.mul(2), (await currentTimestamp()).add(2 * DAY));
+            await pool.startAmp1Change(AMPLIFICATION_PARAMETER.mul(2), (await currentTimestamp()).add(2 * DAY));
+            await pool.startAmp2Change(AMPLIFICATION_PARAMETER.mul(2), (await currentTimestamp()).add(2 * DAY));
             await advanceTime(3 * DAY);
           });
 
@@ -446,11 +456,14 @@ describe('ComposableCustomPool', () => {
             sharedBeforeEach(async () => {
               const endValue = AMPLIFICATION_PARAMETER.mul(2);
               const duration = WEEK;
-              await pool.startAmpChange(endValue, (await currentTimestamp()).add(duration));
+              await pool.startAmp1Change(endValue, (await currentTimestamp()).add(duration));
+              await pool.startAmp2Change(endValue, (await currentTimestamp()).add(duration));
               await advanceTime(duration * 1.5);
 
-              const { value: ampAfter } = await pool.getAmplificationParameter();
-              expect(ampAfter).to.equal(endValue.mul(AMP_PRECISION));
+              const { value1: amp1After } = await pool.getAmplificationParameter1();
+              const { value2: amp2After } = await pool.getAmplificationParameter2();
+              expect(amp1After).to.equal(endValue.mul(AMP_PRECISION));
+              expect(amp2After).to.equal(endValue.mul(AMP_PRECISION));
             });
 
             // Even if the amplification factor changes, the value stored should remain the same

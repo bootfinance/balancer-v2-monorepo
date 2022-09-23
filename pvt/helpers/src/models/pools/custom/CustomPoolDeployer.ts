@@ -20,9 +20,9 @@ export default {
 
     const poolId = await pool.getPoolId();
     const bptIndex = await pool.getBptIndex();
-    const { tokens, swapFeePercentage, amplificationParameter, owner } = deployment;
+    const { tokens, swapFeePercentage, amplificationParameter1, amplificationParameter2, owner } = deployment;
 
-    return new CustomPool(pool, poolId, vault, tokens, bptIndex, swapFeePercentage, amplificationParameter, owner);
+    return new CustomPool(pool, poolId, vault, tokens, bptIndex, swapFeePercentage, amplificationParameter1, amplificationParameter2, owner);
   },
 
   async _deployStandalone(params: CustomPoolDeployment, vault: Vault): Promise<Contract> {
@@ -34,7 +34,8 @@ export default {
       swapFeePercentage,
       pauseWindowDuration,
       bufferPeriodDuration,
-      amplificationParameter,
+      amplificationParameter1,
+      amplificationParameter2,
       from,
     } = params;
 
@@ -51,7 +52,8 @@ export default {
           rateProviders: TypesConverter.toAddresses(rateProviders),
           tokenRateCacheDurations,
           exemptFromYieldProtocolFeeFlags,
-          amplificationParameter,
+          amplificationParameter1,
+          amplificationParameter2,
           swapFeePercentage,
           pauseWindowDuration,
           bufferPeriodDuration,

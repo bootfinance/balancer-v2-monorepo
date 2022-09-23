@@ -70,16 +70,16 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
         _setAmplification2Data(initialAmp2);
     }
 
-    function getAmplificationParameter1() external view returns (uint256 value, bool isUpdating, uint256 precision)
+    function getAmplificationParameter1() external view returns (uint256 value1, bool isUpdating1, uint256 precision1)
     {
-        (value, isUpdating) = _getAmplificationParameter1();
-        precision = CustomMath._AMP_PRECISION;
+        (value1, isUpdating1) = _getAmplificationParameter1();
+        precision1 = CustomMath._AMP_PRECISION;
     }
 
-    function getAmplificationParameter2() external view returns (uint256 value, bool isUpdating, uint256 precision)
+    function getAmplificationParameter2() external view returns (uint256 value2, bool isUpdating2, uint256 precision2)
     {
-        (value, isUpdating) = _getAmplificationParameter2();
-        precision = CustomMath._AMP_PRECISION;
+        (value2, isUpdating2) = _getAmplificationParameter2();
+        precision2 = CustomMath._AMP_PRECISION;
     }
 
     // Return the current amp value, which will be an interpolation if there is an ongoing amp update.

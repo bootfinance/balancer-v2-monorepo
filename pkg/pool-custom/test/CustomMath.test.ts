@@ -31,11 +31,12 @@ describe('CustomMath', function () {
   });
 
   context('invariant', () => {
-    async function checkInvariant(balances: BigNumber[], amp: number): Promise<void> {
-      const ampParameter = bn(amp).mul(AMP_PRECISION);
+    async function checkInvariant(balances: BigNumber[], amp1: number, amp2: number): Promise<void> {
+      const ampParameter1 = bn(amp1).mul(AMP_PRECISION);
+      const ampParameter2 = bn(amp2).mul(AMP_PRECISION);
 
-      const actualInvariant = await mock.invariant(ampParameter, balances);
-      const expectedInvariant = calculateInvariant(balances, amp);
+      const actualInvariant = await mock.invariant(ampParameter1, ampParameter2, balances);
+      const expectedInvariant = calculateInvariant(balances, amp1, amp2);
 
       expectEqualWithError(actualInvariant, expectedInvariant, MAX_RELATIVE_ERROR);
     }
@@ -46,7 +47,8 @@ describe('CustomMath', function () {
 
         it(`computes the invariant for ${numTokens} tokens`, async () => {
           for (let amp = 100; amp <= 5000; amp += 100) {
-            await checkInvariant(balances, amp);
+            // TODO: check me - JP
+            await checkInvariant(balances, amp, amp);
           }
         });
       }
@@ -65,11 +67,12 @@ describe('CustomMath', function () {
     });
 
     it('still converges at extreme values', async () => {
-      const amp = bn(1);
+      const amp1 = bn(1);
+      const amp2 = bn(1);
       const balances = [fp(0.00000001), fp(1200000000), fp(300)];
 
-      const result = await mock.invariant(amp.mul(AMP_PRECISION), balances);
-      const expectedInvariant = calculateInvariant(balances, amp);
+      const result = await mock.invariant(amp1.mul(AMP_PRECISION), amp2.mul(AMP_PRECISION), balances);
+      const expectedInvariant = calculateInvariant(balances, amp1, amp2);
 
       expectEqualWithError(result, expectedInvariant, MAX_RELATIVE_ERROR);
     });
@@ -79,13 +82,16 @@ describe('CustomMath', function () {
     async function checkTokenBalanceGivenInvariant(
       balances: BigNumber[],
       invariant: BigNumber,
-      amp: number,
+      amp1: number,
+      amp2: number,
       tokenIndex: number
     ): Promise<void> {
-      const ampParameter = bn(amp).mul(AMP_PRECISION);
+      const ampParameter1 = bn(amp1).mul(AMP_PRECISION);
+      const ampParameter2 = bn(amp2).mul(AMP_PRECISION);
 
       const actualTokenBalance = await mock.getTokenBalanceGivenInvariantAndAllOtherBalances(
-        ampParameter,
+        ampParameter1,
+        ampParameter2,
         balances,
         invariant,
         tokenIndex
@@ -93,7 +99,8 @@ describe('CustomMath', function () {
 
       // Note this function takes the decimal amp (unadjusted)
       const expectedTokenBalance = getTokenBalanceGivenInvariantAndAllOtherBalances(
-        amp,
+        amp1,
+        amp2,
         balances,
         invariant,
         tokenIndex
@@ -107,15 +114,16 @@ describe('CustomMath', function () {
         const balances = Array.from({ length: numTokens }, () => random(250, 350)).map(fp);
 
         it(`computes the token balance for ${numTokens} tokens`, async () => {
+          // TODO: check me -JP
           for (let amp = 100; amp <= 5000; amp += 100) {
-            const currentInvariant = calculateInvariant(balances, amp);
+            const currentInvariant = calculateInvariant(balances, amp, amp);
 
             // mutate the balances
             for (let tokenIndex = 0; tokenIndex < numTokens; tokenIndex++) {
               const newBalances: BigNumber[] = Object.assign([], balances);
               newBalances[tokenIndex] = newBalances[tokenIndex].add(fp(100));
 
-              await checkTokenBalanceGivenInvariant(newBalances, currentInvariant, amp, tokenIndex);
+              await checkTokenBalanceGivenInvariant(newBalances, currentInvariant, amp, amp, tokenIndex);
             }
           }
         });
@@ -126,28 +134,36 @@ describe('CustomMath', function () {
   context('in given out', () => {
     context('two tokens', () => {
       it('returns in given out', async () => {
-        const amp = bn(100);
+        const amp1 = bn(100);
+        const amp2 = bn(100);
         const balances = Array.from({ length: 2 }, () => random(8, 12)).map(fp);
         const tokenIndexIn = 0;
         const tokenIndexOut = 1;
         const amountOut = fp(1);
 
-        const result = await mock.inGivenOut(amp.mul(AMP_PRECISION), balances, tokenIndexIn, tokenIndexOut, amountOut);
-        const expectedAmountIn = calcInGivenOut(balances, amp, tokenIndexIn, tokenIndexOut, amountOut);
+        const result = await mock.inGivenOut(
+            amp1.mul(AMP_PRECISION),
+            amp2.mul(AMP_PRECISION),
+            balances,
+            tokenIndexIn,
+            tokenIndexOut,
+            amountOut);
+        const expectedAmountIn = calcInGivenOut(balances, amp1, amp2, tokenIndexIn, tokenIndexOut, amountOut);
 
         expectEqualWithError(result, bn(expectedAmountIn.toFixed(0)), MAX_RELATIVE_ERROR);
       });
     });
     context('three tokens', () => {
       it('returns in given out', async () => {
-        const amp = bn(100);
+        const amp1 = bn(100);
+        const amp2 = bn(100);
         const balances = Array.from({ length: 3 }, () => random(10, 14)).map(fp);
         const tokenIndexIn = 0;
         const tokenIndexOut = 1;
         const amountOut = fp(1);
 
-        const result = await mock.inGivenOut(amp.mul(AMP_PRECISION), balances, tokenIndexIn, tokenIndexOut, amountOut);
-        const expectedAmountIn = calcInGivenOut(balances, amp, tokenIndexIn, tokenIndexOut, amountOut);
+        const result = await mock.inGivenOut(amp1.mul(AMP_PRECISION), amp2.mul(AMP_PRECISION), balances, tokenIndexIn, tokenIndexOut, amountOut);
+        const expectedAmountIn = calcInGivenOut(balances, amp1, amp2, tokenIndexIn, tokenIndexOut, amountOut);
 
         expectEqualWithError(result, bn(expectedAmountIn.toFixed(0)), MAX_RELATIVE_ERROR);
       });
@@ -157,28 +173,30 @@ describe('CustomMath', function () {
   context('out given in', () => {
     context('two tokens', () => {
       it('returns out given in', async () => {
-        const amp = bn(10);
+        const amp1 = bn(10);
+        const amp2 = bn(10);
         const balances = Array.from({ length: 2 }, () => random(10, 12)).map(fp);
         const tokenIndexIn = 0;
         const tokenIndexOut = 1;
         const amountIn = fp(1);
 
-        const result = await mock.outGivenIn(amp.mul(AMP_PRECISION), balances, tokenIndexIn, tokenIndexOut, amountIn);
-        const expectedAmountOut = calcOutGivenIn(balances, amp, tokenIndexIn, tokenIndexOut, amountIn);
+        const result = await mock.outGivenIn(amp1.mul(AMP_PRECISION), amp2.mul(AMP_PRECISION), balances, tokenIndexIn, tokenIndexOut, amountIn);
+        const expectedAmountOut = calcOutGivenIn(balances, amp1, amp2, tokenIndexIn, tokenIndexOut, amountIn);
 
         expectEqualWithError(result, bn(expectedAmountOut.toFixed(0)), MAX_RELATIVE_ERROR);
       });
     });
     context('three tokens', () => {
       it('returns out given in', async () => {
-        const amp = bn(10);
+        const amp1 = bn(10);
+        const amp2 = bn(10);
         const balances = Array.from({ length: 3 }, () => random(10, 14)).map(fp);
         const tokenIndexIn = 0;
         const tokenIndexOut = 1;
         const amountIn = fp(1);
 
-        const result = await mock.outGivenIn(amp.mul(AMP_PRECISION), balances, tokenIndexIn, tokenIndexOut, amountIn);
-        const expectedAmountOut = calcOutGivenIn(balances, amp, tokenIndexIn, tokenIndexOut, amountIn);
+        const result = await mock.outGivenIn(amp1.mul(AMP_PRECISION), amp2.mul(AMP_PRECISION), balances, tokenIndexIn, tokenIndexOut, amountIn);
+        const expectedAmountOut = calcOutGivenIn(balances, amp1, amp2, tokenIndexIn, tokenIndexOut, amountIn);
 
         expectEqualWithError(result, bn(expectedAmountOut.toFixed(0)), MAX_RELATIVE_ERROR);
       });
@@ -189,17 +207,20 @@ describe('CustomMath', function () {
     const SWAP_FEE = fp(0.022);
 
     async function checkBptOutGivenTokensIn(
-      amp: number,
+      amp1: number,
+      amp2: number,
       balances: BigNumber[],
       amountsIn: BigNumber[],
       bptTotalSupply: BigNumber,
       swapFee: BigNumber
     ): Promise<void> {
-      const ampParameter = bn(amp).mul(AMP_PRECISION);
-      const currentInvariant = calculateInvariant(balances, amp);
+      const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
+      const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
+      const currentInvariant = calculateInvariant(balances, amp1, amp2);
 
       const actualBptOut = await mock.exactTokensInForBPTOut(
-        ampParameter,
+        amp1Parameter,
+        amp2Parameter,
         balances,
         amountsIn,
         bptTotalSupply,
@@ -209,7 +230,8 @@ describe('CustomMath', function () {
 
       const expectedBptOut = calcBptOutGivenExactTokensIn(
         balances,
-        amp,
+        amp1,
+        amp2,
         amountsIn,
         bptTotalSupply,
         currentInvariant,
@@ -230,7 +252,8 @@ describe('CustomMath', function () {
 
         it(`computes the bptOut for ${numTokens} tokens`, async () => {
           for (let amp = 100; amp <= 5000; amp += 100) {
-            await checkBptOutGivenTokensIn(amp, balances, amountsIn, totalSupply, SWAP_FEE);
+            // TODO: Check me, -JP
+            await checkBptOutGivenTokensIn(amp, amp, balances, amountsIn, totalSupply, SWAP_FEE);
           }
         });
       }
@@ -241,7 +264,8 @@ describe('CustomMath', function () {
     const SWAP_FEE = fp(0.012);
 
     async function checkTokenInGivenBptOut(
-      amp: number,
+      amp1: number,
+      amp2: number,
       balances: BigNumber[],
       tokenIndex: number,
       bptAmountOut: BigNumber,
@@ -249,10 +273,12 @@ describe('CustomMath', function () {
       currentInvariant: BigNumber,
       swapFee: BigNumber
     ): Promise<void> {
-      const ampParameter = bn(amp).mul(AMP_PRECISION);
+      const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
+      const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
 
       const actualTokenIn = await mock.tokenInForExactBPTOut(
-        ampParameter,
+        amp1Parameter,
+        amp2Parameter,
         balances,
         tokenIndex,
         bptAmountOut,
@@ -264,7 +290,8 @@ describe('CustomMath', function () {
       const expectedTokenIn = calcTokenInGivenExactBptOut(
         tokenIndex,
         balances,
-        amp,
+        amp1,
+        amp2,
         bptAmountOut,
         bptTotalSupply,
         currentInvariant,
@@ -286,10 +313,12 @@ describe('CustomMath', function () {
 
         it(`computes the token in for ${numTokens} tokens`, async () => {
           for (let amp = 100; amp <= 5000; amp += 100) {
-            const currentInvariant = calculateInvariant(balances, amp);
+            // TODO: Check me. -JP
+            const currentInvariant = calculateInvariant(balances, amp, amp);
 
             for (let tokenIndex = 0; tokenIndex < numTokens; tokenIndex++) {
               await checkTokenInGivenBptOut(
+                amp,
                 amp,
                 balances,
                 tokenIndex,
@@ -309,17 +338,20 @@ describe('CustomMath', function () {
     const SWAP_FEE = fp(0.038);
 
     async function checkBptInGivenTokensOut(
-      amp: number,
+      amp1: number,
+      amp2: number,
       balances: BigNumber[],
       amountsOut: BigNumber[],
       bptTotalSupply: BigNumber,
       currentInvariant: BigNumber,
       swapFee: BigNumber
     ): Promise<void> {
-      const ampParameter = bn(amp).mul(AMP_PRECISION);
+      const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
+      const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
 
       const actualBptIn = await mock.bptInForExactTokensOut(
-        ampParameter,
+        amp1Parameter,
+        amp2Parameter,
         balances,
         amountsOut,
         bptTotalSupply,
@@ -329,7 +361,8 @@ describe('CustomMath', function () {
 
       const expectedBptIn = calcBptInGivenExactTokensOut(
         balances,
-        amp,
+        amp1,
+        amp2,
         amountsOut,
         bptTotalSupply,
         currentInvariant,
@@ -350,9 +383,9 @@ describe('CustomMath', function () {
 
         it(`computes the bptOut for ${numTokens} tokens`, async () => {
           for (let amp = 100; amp <= 5000; amp += 100) {
-            const currentInvariant = calculateInvariant(balances, amp);
-
-            await checkBptInGivenTokensOut(amp, balances, amountsOut, totalSupply, currentInvariant, SWAP_FEE);
+            // TODO Check me. -JP
+            const currentInvariant = calculateInvariant(balances, amp, amp);
+            await checkBptInGivenTokensOut(amp, amp, balances, amountsOut, totalSupply, currentInvariant, SWAP_FEE);
           }
         });
       }
@@ -363,7 +396,8 @@ describe('CustomMath', function () {
     const SWAP_FEE = fp(0.012);
 
     async function checkTokenOutGivenBptIn(
-      amp: number,
+      amp1: number,
+      amp2: number,
       balances: BigNumber[],
       tokenIndex: number,
       bptAmountIn: BigNumber,
@@ -371,10 +405,12 @@ describe('CustomMath', function () {
       currentInvariant: BigNumber,
       swapFee: BigNumber
     ): Promise<void> {
-      const ampParameter = bn(amp).mul(AMP_PRECISION);
+      const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
+      const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
 
       const actualTokenOut = await mock.exactBPTInForTokenOut(
-        ampParameter,
+        amp1Parameter,
+        amp2Parameter,
         balances,
         tokenIndex,
         bptAmountIn,
@@ -386,7 +422,8 @@ describe('CustomMath', function () {
       const expectedTokenOut = calcTokenOutGivenExactBptIn(
         tokenIndex,
         balances,
-        amp,
+        amp1,
+        amp2,
         bptAmountIn,
         bptTotalSupply,
         currentInvariant,
@@ -407,11 +444,13 @@ describe('CustomMath', function () {
         });
 
         it(`computes the token out for ${numTokens} tokens`, async () => {
+          // TODO: Check me. -JP
           for (let amp = 100; amp <= 5000; amp += 100) {
-            const currentInvariant = calculateInvariant(balances, amp);
+            const currentInvariant = calculateInvariant(balances, amp, amp);
 
             for (let tokenIndex = 0; tokenIndex < numTokens; tokenIndex++) {
               await checkTokenOutGivenBptIn(
+                amp,
                 amp,
                 balances,
                 tokenIndex,
@@ -428,10 +467,11 @@ describe('CustomMath', function () {
   });
 
   context('get rate', () => {
-    async function checkRate(balances: BigNumber[], amp: number, supply: BigNumber): Promise<void> {
-      const ampParameter = bn(amp).mul(AMP_PRECISION);
-      const actualRate = await mock.getRate(balances, ampParameter, supply);
-      const currentInvariant = calculateInvariant(balances, ampParameter);
+    async function checkRate(balances: BigNumber[], amp1: number, amp2: number, supply: BigNumber): Promise<void> {
+      const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
+      const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
+      const actualRate = await mock.getRate(balances, amp1Parameter, amp2Parameter, supply);
+      const currentInvariant = calculateInvariant(balances, amp1Parameter, amp2Parameter);
       const expectedRate = fp(fromFp(currentInvariant).div(fromFp(supply)));
 
       expectEqualWithError(actualRate, expectedRate, MAX_RELATIVE_ERROR);
@@ -445,8 +485,9 @@ describe('CustomMath', function () {
         const supply = fp(350).mul(numTokens);
 
         it(`computes the rate for ${numTokens} tokens`, async () => {
+          // TODO: Check me. -JP
           for (let amp = 100; amp <= 5000; amp += 100) {
-            await checkRate(balances, amp, supply);
+            await checkRate(balances, amp, amp, supply);
           }
         });
       }

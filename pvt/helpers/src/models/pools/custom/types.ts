@@ -113,7 +113,8 @@ export type PoolQueryResult = JoinQueryResult | ExitQueryResult;
 export type RawCustomPoolDeployment = {
   tokens?: TokenList;
   swapFeePercentage?: BigNumberish;
-  amplificationParameter?: BigNumberish;
+  amplificationParameter1?: BigNumberish;
+  amplificationParameter2?: BigNumberish;
   rateProviders?: Account[];
   tokenRateCacheDurations?: BigNumberish[];
   exemptFromYieldProtocolFeeFlags?: boolean[];
@@ -129,7 +130,8 @@ export type RawCustomPoolDeployment = {
 export type CustomPoolDeployment = {
   tokens: TokenList;
   swapFeePercentage: BigNumberish;
-  amplificationParameter: BigNumberish;
+  amplificationParameter1: BigNumberish;
+  amplificationParameter2: BigNumberish;
   rateProviders: Account[];
   tokenRateCacheDurations: BigNumberish[];
   exemptFromYieldProtocolFeeFlags: boolean[];
