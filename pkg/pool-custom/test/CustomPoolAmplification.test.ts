@@ -31,9 +31,9 @@ describe('CustomPoolAmplification', () => {
     vault = await Vault.create({ admin });
   });
 
-  const deployPool = (owner: Account, amp = INITIAL_AMPLIFICATION_PARAMETER): Promise<Contract> =>
+  const deployPool = (owner: Account, amp1 = INITIAL_AMPLIFICATION_PARAMETER, amp2 = INITIAL_AMPLIFICATION_PARAMETER): Promise<Contract> =>
     deploy('MockCustomPoolAmplification', {
-      args: [vault.address, TypesConverter.toAddress(owner), amp],
+      args: [vault.address, TypesConverter.toAddress(owner), amp1, amp2],
     });
 
   describe('constructor', () => {
@@ -44,16 +44,18 @@ describe('CustomPoolAmplification', () => {
       });
 
       it('sets the expected amplification parameter', async () => {
-        const { value, isUpdating, precision } = await pool.getAmplificationParameter();
-        expect(value).to.be.equal(INITIAL_AMPLIFICATION_PARAMETER.mul(AMP_PRECISION));
-        expect(isUpdating).to.be.false;
-        expect(precision).to.be.equal(AMP_PRECISION);
+        const { value1, isUpdating1, precision1 } = await pool.getAmplificationParameter1();
+        const { value2, isUpdating2, precision2 } = await pool.getAmplificationParameter2();
+        // TODO: Fix me. -JP
+        expect(value1).to.be.equal(INITIAL_AMPLIFICATION_PARAMETER.mul(AMP_PRECISION));
+        expect(isUpdating1).to.be.false;
+        expect(precision1).to.be.equal(AMP_PRECISION);
       });
     });
 
     context('when passing an initial amplification parameter less than MIN_AMP', () => {
       it('reverts', async () => {
-        await expect(deployPool(owner, MIN_AMP.sub(1))).to.be.revertedWith('MIN_AMP');
+        await expect(deployPool(owner, MIN_AMP.sub(1), MIN_AMP.sub(1))).to.be.revertedWith('MIN_AMP');
       });
     });
 
@@ -85,22 +87,23 @@ describe('CustomPoolAmplification', () => {
 
             context('when there is no ongoing update', () => {
               it('starts changing the amp', async () => {
-                await pool.connect(caller).startAmplificationParameterUpdate(newAmp, endTime);
+                // TODO: fix me. -JP
+                await pool.connect(caller).startAmplificationParameter1Update(newAmp, endTime);
 
                 await advanceTime(duration / 3);
 
-                const { value, isUpdating } = await pool.getAmplificationParameter();
-                expect(isUpdating).to.be.true;
+                const { value1, isUpdating1 } = await pool.getAmplificationParameter1();
+                expect(isUpdating1).to.be.true;
 
                 if (increasing) {
                   const diff = newAmp.sub(INITIAL_AMPLIFICATION_PARAMETER).mul(AMP_PRECISION);
-                  expect(value).to.be.equalWithError(
+                  expect(value1).to.be.equalWithError(
                     INITIAL_AMPLIFICATION_PARAMETER.mul(AMP_PRECISION).add(diff.div(3)),
                     0.00001
                   );
                 } else {
                   const diff = INITIAL_AMPLIFICATION_PARAMETER.sub(newAmp).mul(AMP_PRECISION);
-                  expect(value).to.be.equalWithError(
+                  expect(value1).to.be.equalWithError(
                     INITIAL_AMPLIFICATION_PARAMETER.mul(AMP_PRECISION).sub(diff.div(3)),
                     0.00001
                   );
@@ -108,13 +111,14 @@ describe('CustomPoolAmplification', () => {
               });
 
               it('stops updating after duration', async () => {
-                await pool.connect(caller).startAmplificationParameterUpdate(newAmp, endTime);
+                // TODO: Fix me. -JP
+                await pool.connect(caller).startAmplificationParameter1Update(newAmp, endTime);
 
                 await advanceTime(duration + 1);
 
-                const { value, isUpdating } = await pool.getAmplificationParameter();
-                expect(value).to.be.equal(newAmp.mul(AMP_PRECISION));
-                expect(isUpdating).to.be.false;
+                const { value1, isUpdating1 } = await pool.getAmplificationParameter1();
+                expect(value1).to.be.equal(newAmp.mul(AMP_PRECISION));
+                expect(isUpdating1).to.be.false;
               });
 
               it('emits an AmpUpdateStarted event', async () => {

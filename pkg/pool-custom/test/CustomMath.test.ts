@@ -56,11 +56,12 @@ describe('CustomMath', function () {
 
     context('two tokens', () => {
       it('invariant equals analytical solution', async () => {
-        const amp = bn(100);
+        const amp1 = bn(100);
+        const amp2 = bn(100);
         const balances = [fp(10), fp(12)];
 
-        const result = await mock.invariant(amp.mul(AMP_PRECISION), balances);
-        const expectedInvariant = calculateAnalyticalInvariantForTwoTokens(balances, amp);
+        const result = await mock.invariant(amp1.mul(AMP_PRECISION), amp2.mul(AMP_PRECISION), balances);
+        const expectedInvariant = calculateAnalyticalInvariantForTwoTokens(balances, amp1);
 
         expectEqualWithError(result, expectedInvariant, MAX_RELATIVE_ERROR);
       });
