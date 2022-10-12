@@ -18,6 +18,7 @@ import "@balancer-labs/v2-pool-utils/contracts/BasePoolAuthorization.sol";
 import "@balancer-labs/v2-solidity-utils/contracts/helpers/WordCodec.sol";
 
 import "./CustomMath.sol";
+import "hardhat/console.sol";
 
 abstract contract CustomPoolAmplification is BasePoolAuthorization {
     using WordCodec for bytes32;
@@ -74,6 +75,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
     {
         (value1, isUpdating1) = _getAmplificationParameter1();
         precision1 = CustomMath._AMP_PRECISION;
+        // console.log(value1,isUpdating1,precision1);
     }
 
     function getAmplificationParameter2() external view returns (uint256 value2, bool isUpdating2, uint256 precision2)
@@ -149,6 +151,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
         endValue = _packedAmplification1Data.decodeUint(_AMP_END_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH);
         startTime = _packedAmplification1Data.decodeUint(_AMP_START_TIME_OFFSET, _AMP_TIMESTAMP_BIT_LENGTH);
         endTime = _packedAmplification1Data.decodeUint(_AMP_END_TIME_OFFSET, _AMP_TIMESTAMP_BIT_LENGTH);
+        // console.log("get A1", startTime, endTime, endValue);
     }
 
     function _getAmplification2Data()
@@ -165,6 +168,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
         endValue = _packedAmplification2Data.decodeUint(_AMP_END_VALUE_OFFSET, _AMP_VALUE_BIT_LENGTH);
         startTime = _packedAmplification2Data.decodeUint(_AMP_START_TIME_OFFSET, _AMP_TIMESTAMP_BIT_LENGTH);
         endTime = _packedAmplification2Data.decodeUint(_AMP_END_TIME_OFFSET, _AMP_TIMESTAMP_BIT_LENGTH);
+        // console.log("get A2", startTime, endTime, endValue);
     }
 
     /**
@@ -175,6 +179,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
      * `getAmplificationParameter` have to be corrected to account for this when comparing to `rawEndValue`.
      */
     function startAmplificationParameter1Update(uint256 rawEndValue, uint256 endTime) external authenticate {
+        // console.log("startA1:", rawEndValue, endTime);
         _require(rawEndValue >= CustomMath._MIN_AMP, Errors.MIN_AMP);
         _require(rawEndValue <= CustomMath._MAX_AMP, Errors.MAX_AMP);
 
@@ -198,6 +203,7 @@ abstract contract CustomPoolAmplification is BasePoolAuthorization {
     }
 
     function startAmplificationParameter2Update(uint256 rawEndValue, uint256 endTime) external authenticate {
+        // console.log("startA2:", rawEndValue, endTime);
         _require(rawEndValue >= CustomMath._MIN_AMP, Errors.MIN_AMP);
         _require(rawEndValue <= CustomMath._MAX_AMP, Errors.MAX_AMP);
 

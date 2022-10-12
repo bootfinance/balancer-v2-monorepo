@@ -23,6 +23,7 @@ import "@balancer-labs/v2-pool-utils/contracts/InvariantGrowthProtocolSwapFees.s
 import "./ComposableCustomPoolStorage.sol";
 import "./ComposableCustomPoolRates.sol";
 import "./CustomMath.sol";
+import "hardhat/console.sol";
 
 abstract contract ComposableCustomPoolProtocolFees is
     ComposableCustomPoolStorage,
@@ -46,19 +47,22 @@ abstract contract ComposableCustomPoolProtocolFees is
     // [ last join-exit amplification  | last post join-exit invariant ]
     // [           23 bits             |            233 bits           ]
 
+    // [ A1      | A2       | last post join-exit invariant ]
+    // [ 23 bits |  23 bits |           210 bits           ]
+
     // TODO FIX ME: for custom swap we need two amp factors, we will store them in the same data structure
     bytes32 private _lastJoinExitData;
 
-    uint256 private constant _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET = 0;
-    uint256 private constant _LAST_POST_JOIN_EXIT_INVARIANT_SIZE = 233;
-    uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION_OFFSET = _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET +
-        _LAST_POST_JOIN_EXIT_INVARIANT_SIZE;
-
     uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION_SIZE = 23;
+    uint256 private constant _LAST_POST_JOIN_EXIT_INVARIANT_SIZE = 256 - 23 - 23;
+    uint256 private constant _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET = 0;
+    uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION1_OFFSET = _LAST_POST_JOIN_EXIT_INVARIANT_SIZE;
+    uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION2_OFFSET = _LAST_POST_JOIN_EXIT_INVARIANT_SIZE + _LAST_JOIN_EXIT_AMPLIFICATION_SIZE;
 
     /**
-     * @dev Calculates due protocol fees originating from accumulated swap fees and yield of non-exempt tokens, pays
-     * them by minting BPT, and returns the updated virtual supply and current balances.
+     * @dev
+     * Calculates protocol fee due originating from accumulated swap fees and yield of non-exempt tokens,
+     * pays the fee by minting BPT and returns the updated virtual supply and current balances.
      */
     function _payProtocolFeesBeforeJoinExit(
         uint256[] memory registeredBalances,
@@ -274,14 +278,11 @@ abstract contract ComposableCustomPoolProtocolFees is
      * yield fees.
      */
     function _updatePostJoinExit(uint256 currentAmp1, uint256 currentAmp2, uint256 postJoinExitInvariant) internal {
-        // TODO: How do we store currentAmp2? FIXIT
+        // TODO: How do we store currentAmp2? FIXED
         _lastJoinExitData =
-            WordCodec.encodeUint(currentAmp1, _LAST_JOIN_EXIT_AMPLIFICATION_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE) |
-            WordCodec.encodeUint(
-                postJoinExitInvariant,
-                _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET,
-                _LAST_POST_JOIN_EXIT_INVARIANT_SIZE
-            );
+            WordCodec.encodeUint(currentAmp1, _LAST_JOIN_EXIT_AMPLIFICATION1_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE) |
+            WordCodec.encodeUint(currentAmp2, _LAST_JOIN_EXIT_AMPLIFICATION2_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE) |
+            WordCodec.encodeUint(postJoinExitInvariant, _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET, _LAST_POST_JOIN_EXIT_INVARIANT_SIZE);
 
         _updateOldRates();
     }
@@ -315,15 +316,15 @@ abstract contract ComposableCustomPoolProtocolFees is
     {
         bytes32 rawData = _lastJoinExitData;
 
-        // TODO FIX ME: we need to store both factors, for now just return the first
+        // TODO FIX ME: we need to store both factors, for now just return the first (DONE)
 
         lastJoinExitAmplification1 = rawData.decodeUint(
-            _LAST_JOIN_EXIT_AMPLIFICATION_OFFSET,
+            _LAST_JOIN_EXIT_AMPLIFICATION1_OFFSET,
             _LAST_JOIN_EXIT_AMPLIFICATION_SIZE
         );
 
         lastJoinExitAmplification2 = rawData.decodeUint(
-            _LAST_JOIN_EXIT_AMPLIFICATION_OFFSET,
+            _LAST_JOIN_EXIT_AMPLIFICATION2_OFFSET,
             _LAST_JOIN_EXIT_AMPLIFICATION_SIZE
         );
 
@@ -331,6 +332,8 @@ abstract contract ComposableCustomPoolProtocolFees is
             _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET,
             _LAST_POST_JOIN_EXIT_INVARIANT_SIZE
         );
+        // console.log("LJE",lastJoinExitAmplification1,lastJoinExitAmplification2,lastPostJoinExitInvariant);
+
     }
 
     /**

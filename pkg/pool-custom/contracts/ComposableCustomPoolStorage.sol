@@ -202,7 +202,7 @@ abstract contract ComposableCustomPoolStorage is BasePool {
     }
 
     function _getMaxTokens() internal pure override returns (uint256) {
-        // The BPT will be one of the Pool tokens, but it is unaffected by the Custom 5 token limit.
+        // The BPT will be one of the Pool tokens, but it is unaffected by the Custom 2 token limit.
         return CustomMath._MAX_CUSTOM_TOKENS + 1;
     }
 

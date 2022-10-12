@@ -104,7 +104,8 @@ export type ExitQueryResult = {
 };
 
 export type LastJoinExitData = {
-  lastJoinExitAmplification: BigNumber;
+  lastJoinExitAmplification1: BigNumber;
+  lastJoinExitAmplification2: BigNumber;
   lastPostJoinExitInvariant: BigNumber;
 };
 

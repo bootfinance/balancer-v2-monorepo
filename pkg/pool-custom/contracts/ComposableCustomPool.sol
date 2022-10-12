@@ -712,7 +712,7 @@ contract ComposableCustomPool is
     function _beforeJoinExit(uint256[] memory registeredBalances) internal returns (BeforeJoinExitReturn memory)
     {
         (uint256 lastJoinExitAmp1, uint256 lastJoinExitAmp2, uint256 lastPostJoinExitInvariant) = getLastJoinExitData();
-        // TODO FIX ME: make sure the below is right
+        // TODO: make sure the below is right (DONE)
         (
             uint256 preJoinExitSupply,
             uint256[] memory balances,
@@ -723,10 +723,9 @@ contract ComposableCustomPool is
         // value calculated using the "old" amplification factor. If not, then we have to calculate this now.
         (uint256 currentAmp1, ) = _getAmplificationParameter1();
         (uint256 currentAmp2, ) = _getAmplificationParameter2();
-        uint256 preJoinExitInvariant = (currentAmp1 == lastJoinExitAmp1 && currentAmp2 == lastJoinExitAmp2)
+        uint256 preJoinExitInvariant = (currentAmp1 == lastJoinExitAmp1) && (currentAmp2 == lastJoinExitAmp2)
             ? oldAmpPreJoinExitInvariant
             : CustomMath._calculateInvariant(currentAmp1, currentAmp2, balances);
-
         return BeforeJoinExitReturn(preJoinExitSupply, balances, currentAmp1, currentAmp2, preJoinExitInvariant);
     }
 

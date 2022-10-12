@@ -29,7 +29,7 @@ library CustomMath {
     uint256 internal constant _MAX_AMP = 5000;
     uint256 internal constant _AMP_PRECISION = 1e3;
 
-    uint256 internal constant _MAX_CUSTOM_TOKENS = 5;
+    uint256 internal constant _MAX_CUSTOM_TOKENS = 2;
 
     // Note on unchecked arithmetic:
     // This contract performs a large number of additions, subtractions, multiplications and divisions, often inside
@@ -118,6 +118,7 @@ library CustomMath {
         // TODO: Add new error code to Errors
         // _revert(Errors.CUSTOM_INVARIANT_DIDNT_CONVERGE);
         _revert(Errors.STABLE_INVARIANT_DIDNT_CONVERGE);
+        return 0;
     }
 
     // Computes how many tokens can be taken out of a pool if `tokenAmountIn` are sent, given the current balances.
