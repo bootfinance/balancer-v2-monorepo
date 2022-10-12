@@ -63,20 +63,8 @@ describe('ComposableCustomPoolRates', () => {
   });
 
   context('for a 3 token pool', () => {
-    itBehavesAsCustomPoolRates(3);
-  });
-
-  context('for a 4 token pool', () => {
-    itBehavesAsCustomPoolRates(4);
-  });
-
-  context('for a 5 token pool', () => {
-    itBehavesAsCustomPoolRates(5);
-  });
-
-  context('for a 6 token pool', () => {
     it('reverts', async () => {
-      const tokens = await TokenList.create(6, { sorted: true });
+      const tokens = await TokenList.create(3, { sorted: true });
       await expect(
         deploy('MockComposableCustomPoolRates', {
           args: [
