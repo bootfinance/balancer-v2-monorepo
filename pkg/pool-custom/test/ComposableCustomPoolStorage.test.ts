@@ -41,20 +41,8 @@ describe('ComposableCustomPoolStorage', () => {
   });
 
   context('for a 3 token pool', () => {
-    itBehavesAsCustomPoolStorage(3);
-  });
-
-  context('for a 4 token pool', () => {
-    itBehavesAsCustomPoolStorage(4);
-  });
-
-  context('for a 5 token pool', () => {
-    itBehavesAsCustomPoolStorage(5);
-  });
-
-  context('for a 6 token pool', () => {
     it('reverts', async () => {
-      const tokens = await TokenList.create(6, { sorted: true });
+      const tokens = await TokenList.create(3, { sorted: true });
       await expect(
         deploy('MockComposableCustomPoolStorage', {
           args: [vault.address, tokens.addresses, tokens.map(() => ZERO_ADDRESS), tokens.map(() => false)],
