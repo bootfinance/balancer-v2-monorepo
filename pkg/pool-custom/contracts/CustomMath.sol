@@ -16,6 +16,7 @@ pragma solidity ^0.7.0;
 
 import "@balancer-labs/v2-solidity-utils/contracts/math/FixedPoint.sol";
 import "@balancer-labs/v2-solidity-utils/contracts/math/Math.sol";
+import "hardhat/console.sol";
 
 // These functions start with an underscore, as if they were part of a contract and not a library. At some point this
 // should be fixed. Additionally, some variables have non mixed case names (e.g. P_D) that relate to the mathematical
@@ -72,6 +73,12 @@ library CustomMath {
 
         uint256 sum = 0; // S in the Curve version
         uint256 numTokens = balances.length;
+
+//        if (numTokens > 2) {
+//            for (uint256 i = 0; i < numTokens; i++) {
+//                console.log(i, balances[i]);
+//            }
+//        }
         for (uint256 i = 0; i < numTokens; i++) {
             sum = sum.add(balances[i]);
         }
@@ -109,9 +116,11 @@ library CustomMath {
 
             if (invariant > prevInvariant) {
                 if (invariant - prevInvariant <= 1) {
+                    // console.log(amplificationParameter1, balances[0], balances[1], invariant);
                     return invariant;
                 }
             } else if (prevInvariant - invariant <= 1) {
+                // console.log(amplificationParameter1, balances[0], balances[1], invariant);
                 return invariant;
             }
         }
@@ -461,6 +470,7 @@ library CustomMath {
         // TODO: Add new error code to Errors
         // _revert(Errors.CUSTOM_GET_BALANCE_DIDNT_CONVERGE);
         _revert(Errors.STABLE_GET_BALANCE_DIDNT_CONVERGE);
+        return 0;
     }
 
     function _getRate(

@@ -81,18 +81,6 @@ contract MockComposableCustomPoolStorage is ComposableCustomPoolStorage {
         return _getRateProvider2();
     }
 
-    function getRateProvider3() external view returns (IRateProvider) {
-        return _getRateProvider3();
-    }
-
-    function getRateProvider4() external view returns (IRateProvider) {
-        return _getRateProvider4();
-    }
-
-    function getRateProvider5() external view returns (IRateProvider) {
-        return _getRateProvider5();
-    }
-
     function getScalingFactor0() external view returns (uint256) {
         return _getScalingFactor0();
     }
@@ -103,18 +91,6 @@ contract MockComposableCustomPoolStorage is ComposableCustomPoolStorage {
 
     function getScalingFactor2() external view returns (uint256) {
         return _getScalingFactor2();
-    }
-
-    function getScalingFactor3() external view returns (uint256) {
-        return _getScalingFactor3();
-    }
-
-    function getScalingFactor4() external view returns (uint256) {
-        return _getScalingFactor4();
-    }
-
-    function getScalingFactor5() external view returns (uint256) {
-        return _getScalingFactor5();
     }
 
     function getRateProvider(uint256 index) external view returns (IRateProvider) {

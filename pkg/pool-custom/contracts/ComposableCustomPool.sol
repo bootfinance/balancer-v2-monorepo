@@ -757,14 +757,6 @@ contract ComposableCustomPool is
      * @dev Multi-token join. Joins with proportional amounts will pay no protocol fees.
      */
 
-//                        params.preJoinExitSupply,
-//                    params.preJoinExitInvariant,
-//                    params.currentAmp1,
-//                    params.currentAmp2,
-//                    params.balances,
-//                    params.scalingFactors,
-
-
     function _joinExactTokensInForBPTOut(DoJoinParams memory params, bytes memory userData)
     private view returns (uint256, uint256[] memory) {
         (uint256[] memory amountsIn, uint256 minBPTAmountOut) = userData.exactTokensInForBptOut();
@@ -791,12 +783,6 @@ contract ComposableCustomPool is
     /**
      * @dev Single-token join, equivalent to swapping a pool token for BPT.
      */
-//                    params.preJoinExitSupply,
-//                params.preJoinExitInvariant,
-//                params.currentAmp1,
-//                params.currentAmp2,
-//                params.balances,
-
 
     function _joinTokenInForExactBPTOut(DoJoinParams memory params, bytes memory userData)
     private view returns (uint256, uint256[] memory) {

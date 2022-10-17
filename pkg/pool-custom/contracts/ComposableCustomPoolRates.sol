@@ -191,16 +191,6 @@ abstract contract ComposableCustomPoolRates is ComposableCustomPoolStorage {
         _cacheTokenRateIfNecessary(0);
         _cacheTokenRateIfNecessary(1);
         _cacheTokenRateIfNecessary(2);
-
-        // Before we update the remaining caches we must check that the Pool contains enough tokens.
-        if (totalTokens == 3) return;
-        _cacheTokenRateIfNecessary(3);
-
-        if (totalTokens == 4) return;
-        _cacheTokenRateIfNecessary(4);
-
-        if (totalTokens == 5) return;
-        _cacheTokenRateIfNecessary(5);
     }
 
     /**
@@ -231,9 +221,6 @@ abstract contract ComposableCustomPoolRates is ComposableCustomPoolStorage {
         if (_hasRateProvider(0)) _updateOldRate(0);
         if (_hasRateProvider(1)) _updateOldRate(1);
         if (_hasRateProvider(2)) _updateOldRate(2);
-        if (_hasRateProvider(3)) _updateOldRate(3);
-        if (_hasRateProvider(4)) _updateOldRate(4);
-        if (_hasRateProvider(5)) _updateOldRate(5);
     }
 
     /**
@@ -279,16 +266,6 @@ abstract contract ComposableCustomPoolRates is ComposableCustomPoolStorage {
         scalingFactors[0] = _getScalingFactor0().mulDown(_getTokenRate(0));
         scalingFactors[1] = _getScalingFactor1().mulDown(_getTokenRate(1));
         scalingFactors[2] = _getScalingFactor2().mulDown(_getTokenRate(2));
-
-        // Before we load the remaining scaling factors we must check that the Pool contains enough tokens.
-        if (totalTokens == 3) return scalingFactors;
-        scalingFactors[3] = _getScalingFactor3().mulDown(_getTokenRate(3));
-
-        if (totalTokens == 4) return scalingFactors;
-        scalingFactors[4] = _getScalingFactor4().mulDown(_getTokenRate(4));
-
-        if (totalTokens == 5) return scalingFactors;
-        scalingFactors[5] = _getScalingFactor5().mulDown(_getTokenRate(5));
 
         return scalingFactors;
     }

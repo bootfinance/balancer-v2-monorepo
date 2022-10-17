@@ -47,9 +47,6 @@ abstract contract ComposableCustomPoolStorage is BasePool {
     IERC20 private immutable _token0;
     IERC20 private immutable _token1;
     IERC20 private immutable _token2;
-    IERC20 private immutable _token3;
-    IERC20 private immutable _token4;
-    IERC20 private immutable _token5;
 
     // All token balances are normalized to behave as if the token had 18 decimals. We assume a token's decimals will
     // not change throughout its lifetime, and store the corresponding scaling factor for each at construction time.
@@ -58,18 +55,12 @@ abstract contract ComposableCustomPoolStorage is BasePool {
     uint256 internal immutable _scalingFactor0;
     uint256 internal immutable _scalingFactor1;
     uint256 internal immutable _scalingFactor2;
-    uint256 internal immutable _scalingFactor3;
-    uint256 internal immutable _scalingFactor4;
-    uint256 internal immutable _scalingFactor5;
 
     // Rate Providers accommodate tokens with a known price ratio, such as Compound's cTokens.
 
     IRateProvider private immutable _rateProvider0;
     IRateProvider private immutable _rateProvider1;
     IRateProvider private immutable _rateProvider2;
-    IRateProvider private immutable _rateProvider3;
-    IRateProvider private immutable _rateProvider4;
-    IRateProvider private immutable _rateProvider5;
 
     // This is a bitmap which allows querying whether a token at a particular index:
     // - has a rate provider associated with it.
@@ -107,16 +98,10 @@ abstract contract ComposableCustomPoolStorage is BasePool {
         _token0 = params.registeredTokens[0];
         _token1 = params.registeredTokens[1];
         _token2 = params.registeredTokens[2];
-        _token3 = totalTokens > 3 ? params.registeredTokens[3] : IERC20(0);
-        _token4 = totalTokens > 4 ? params.registeredTokens[4] : IERC20(0);
-        _token5 = totalTokens > 5 ? params.registeredTokens[5] : IERC20(0);
 
         _scalingFactor0 = _computeScalingFactor(params.registeredTokens[0]);
         _scalingFactor1 = _computeScalingFactor(params.registeredTokens[1]);
         _scalingFactor2 = _computeScalingFactor(params.registeredTokens[2]);
-        _scalingFactor3 = totalTokens > 3 ? _computeScalingFactor(params.registeredTokens[3]) : 0;
-        _scalingFactor4 = totalTokens > 4 ? _computeScalingFactor(params.registeredTokens[4]) : 0;
-        _scalingFactor5 = totalTokens > 5 ? _computeScalingFactor(params.registeredTokens[5]) : 0;
 
         // The Vault keeps track of all Pool tokens in a specific order: we need to know what the index of BPT is in
         // this ordering to be able to identify it when balances arrays are received. Since the tokens array is sorted,
@@ -188,9 +173,6 @@ abstract contract ComposableCustomPoolStorage is BasePool {
         _rateProvider0 = rateProviders[0];
         _rateProvider1 = rateProviders[1];
         _rateProvider2 = rateProviders[2];
-        _rateProvider3 = (rateProviders.length > 3) ? rateProviders[3] : IRateProvider(0);
-        _rateProvider4 = (rateProviders.length > 4) ? rateProviders[4] : IRateProvider(0);
-        _rateProvider5 = (rateProviders.length > 5) ? rateProviders[5] : IRateProvider(0);
 
         _rateProviderInfoBitmap = rateProviderInfoBitmap;
     }
@@ -214,10 +196,6 @@ abstract contract ComposableCustomPoolStorage is BasePool {
         if (token == _token0) return 0;
         if (token == _token1) return 1;
         if (token == _token2) return 2;
-        if (token == _token3) return 3;
-        if (token == _token4) return 4;
-        if (token == _token5) return 5;
-
         _revert(Errors.INVALID_TOKEN);
     }
 
@@ -231,18 +209,6 @@ abstract contract ComposableCustomPoolStorage is BasePool {
 
     function _getScalingFactor2() internal view returns (uint256) {
         return _scalingFactor2;
-    }
-
-    function _getScalingFactor3() internal view returns (uint256) {
-        return _scalingFactor3;
-    }
-
-    function _getScalingFactor4() internal view returns (uint256) {
-        return _scalingFactor4;
-    }
-
-    function _getScalingFactor5() internal view returns (uint256) {
-        return _scalingFactor5;
     }
 
     function _scalingFactor(IERC20) internal view virtual override returns (uint256) {
@@ -332,18 +298,6 @@ abstract contract ComposableCustomPoolStorage is BasePool {
         return _rateProvider2;
     }
 
-    function _getRateProvider3() internal view returns (IRateProvider) {
-        return _rateProvider3;
-    }
-
-    function _getRateProvider4() internal view returns (IRateProvider) {
-        return _rateProvider4;
-    }
-
-    function _getRateProvider5() internal view returns (IRateProvider) {
-        return _rateProvider5;
-    }
-
     /**
      * @dev Returns the rate providers configured for each token (in the same order as registered).
      */
@@ -357,26 +311,14 @@ abstract contract ComposableCustomPoolStorage is BasePool {
         providers[2] = _getRateProvider2();
 
         // Before we load the remaining rate providers we must check that the Pool contains enough tokens.
-        if (totalTokens == 3) return providers;
-        providers[3] = _getRateProvider3();
-
-        if (totalTokens == 4) return providers;
-        providers[4] = _getRateProvider4();
-
-        if (totalTokens == 5) return providers;
-        providers[5] = _getRateProvider5();
+        return providers;
     }
 
     function _getRateProvider(uint256 index) internal view returns (IRateProvider) {
         if (index == 0) return _getRateProvider0();
         if (index == 1) return _getRateProvider1();
         if (index == 2) return _getRateProvider2();
-        if (index == 3) return _getRateProvider3();
-        if (index == 4) return _getRateProvider4();
-        if (index == 5) return _getRateProvider5();
-        else {
-            _revert(Errors.INVALID_TOKEN);
-        }
+        _revert(Errors.INVALID_TOKEN);
     }
 
     /**

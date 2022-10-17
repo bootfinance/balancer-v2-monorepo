@@ -221,8 +221,8 @@ describe('ComposableCustomPoolStorage', () => {
           const expectedScalingFactors = tokens.map((token) => fp(1).mul(bn(10).pow(18 - token.decimals)));
           expectedScalingFactors.splice(bptIndex, 0, fp(1));
 
-          // There's always 6 getters however not all of them may be used. Unused getters return zero.
-          const paddedScalingFactors = Array.from({ length: 6 }, (_, i) => expectedScalingFactors[i] ?? bn(0));
+          // There's always 3 getters however not all of them may be used. Unused getters return zero.
+          const paddedScalingFactors = Array.from({ length: 3 }, (_, i) => expectedScalingFactors[i] ?? bn(0));
           await Promise.all(
             paddedScalingFactors.map(async (expectedScalingFactor, i) => {
               expect(await pool[`getScalingFactor${i}`]()).to.be.eq(expectedScalingFactor);
@@ -237,8 +237,8 @@ describe('ComposableCustomPoolStorage', () => {
         it('returns the expected rate provider', async () => {
           const expectedRateProviders = rateProviders.slice();
           expectedRateProviders.splice(bptIndex, 0, ZERO_ADDRESS);
-          // There's always 6 getters however not all of them may be used. Unused getters return the zero address.
-          const paddedRateProviders = Array.from({ length: 6 }, (_, i) => expectedRateProviders[i] ?? ZERO_ADDRESS);
+          // There's always 3 getters however not all of them may be used. Unused getters return the zero address.
+          const paddedRateProviders = Array.from({ length: 3 }, (_, i) => expectedRateProviders[i] ?? ZERO_ADDRESS);
 
           await Promise.all(
             paddedRateProviders.map(async (expectedRateProvider, i) => {
