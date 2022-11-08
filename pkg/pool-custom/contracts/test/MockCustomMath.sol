@@ -14,11 +14,12 @@
 
 pragma solidity ^0.7.0;
 
+import "../StableMath.sol";
 import "../CustomMath.sol";
 
 contract MockCustomMath {
-    function invariant(uint256 amp1, uint256 amp2, uint256[] memory balances) external pure returns (uint256) {
-        return CustomMath._calculateInvariant(amp1, amp2, balances);
+    function invariant(uint256 amp1, uint256 amp2, uint256[] memory balances, uint256 curve) external view returns (uint256) {
+        return CustomMath.calculateInvariant(amp1, amp2, balances, curve);
     }
 
     function outGivenIn(
@@ -28,17 +29,16 @@ contract MockCustomMath {
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
         uint256 tokenAmountIn
-    ) external pure returns (uint256) {
+    ) external view returns (uint256, uint256) {
         return
-            CustomMath._calcOutGivenIn(
-                amp1,
-                amp2,
-                balances,
-                tokenIndexIn,
-                tokenIndexOut,
-                tokenAmountIn,
-                CustomMath._calculateInvariant(amp1, amp2, balances)
-            );
+        CustomMath.calcOutGivenIn(
+            amp1,
+            amp2,
+            balances,
+            tokenIndexIn,
+            tokenIndexOut,
+            tokenAmountIn
+        );
     }
 
     function inGivenOut(
@@ -48,122 +48,116 @@ contract MockCustomMath {
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
         uint256 tokenAmountOut
-    ) external pure returns (uint256) {
+    ) external view returns (uint256, uint256) {
         return
-            CustomMath._calcInGivenOut(
-                amp1,
-                amp2,
-                balances,
-                tokenIndexIn,
-                tokenIndexOut,
-                tokenAmountOut,
-                CustomMath._calculateInvariant(amp1, amp2, balances)
-            );
+        CustomMath.calcInGivenOut(
+            amp1,
+            amp2,
+            balances,
+            tokenIndexIn,
+            tokenIndexOut,
+            tokenAmountOut
+        );
     }
 
     function exactTokensInForBPTOut(
         uint256 amp1,
+        uint256 D1,
         uint256 amp2,
+        uint256 D2,
         uint256[] memory balances,
         uint256[] memory amountsIn,
         uint256 bptTotalSupply,
-        uint256 currentInvariant,
         uint256 swapFee
-    ) external pure returns (uint256) {
+    ) external view returns (uint256) {
         return
-            CustomMath._calcBptOutGivenExactTokensIn(
-                amp1,
-                amp2,
-                balances,
-                amountsIn,
-                bptTotalSupply,
-                currentInvariant,
-                swapFee
-            );
+        CustomMath.calcBptOutGivenExactTokensIn(
+            CustomMath.Curve(amp1, D1, amp2, D2),
+            balances,
+            amountsIn,
+            bptTotalSupply,
+            swapFee
+        );
     }
 
     function tokenInForExactBPTOut(
         uint256 amp1,
+        uint256 D1,
         uint256 amp2,
+        uint256 D2,
         uint256[] memory balances,
         uint256 tokenIndex,
         uint256 bptAmountOut,
         uint256 bptTotalSupply,
-        uint256 currentInvariant,
         uint256 swapFee
-    ) external pure returns (uint256) {
+    ) external view returns (uint256) {
         return
-            CustomMath._calcTokenInGivenExactBptOut(
-                amp1,
-                amp2,
-                balances,
-                tokenIndex,
-                bptAmountOut,
-                bptTotalSupply,
-                currentInvariant,
-                swapFee
-            );
+        CustomMath.calcTokenInGivenExactBptOut(
+            CustomMath.Curve(amp1, D1, amp2, D2),
+            balances,
+            tokenIndex,
+            bptAmountOut,
+            bptTotalSupply,
+            swapFee
+        );
     }
 
     function exactBPTInForTokenOut(
         uint256 amp1,
+        uint256 D1,
         uint256 amp2,
+        uint256 D2,
         uint256[] memory balances,
         uint256 tokenIndex,
         uint256 bptAmountIn,
         uint256 bptTotalSupply,
         uint256 currentInvariant,
         uint256 swapFee
-    ) external pure returns (uint256) {
+    ) external view returns (uint256) {
         return
-            CustomMath._calcTokenOutGivenExactBptIn(
-                amp1,
-                amp2,
-                balances,
-                tokenIndex,
-                bptAmountIn,
-                bptTotalSupply,
-                currentInvariant,
-                swapFee
-            );
+        CustomMath.calcTokenOutGivenExactBptIn(
+            CustomMath.Curve(amp1, D1, amp2, D2),
+            balances,
+            tokenIndex,
+            bptAmountIn,
+            bptTotalSupply,
+            swapFee
+        );
     }
 
     function bptInForExactTokensOut(
         uint256 amp1,
+        uint256 D1,
         uint256 amp2,
+        uint256 D2,
         uint256[] memory balances,
         uint256[] memory amountsOut,
         uint256 bptTotalSupply,
-        uint256 currentInvariant,
         uint256 swapFee
-    ) external pure returns (uint256) {
+    ) external view returns (uint256) {
         return
-            CustomMath._calcBptInGivenExactTokensOut(
-                amp1,
-                amp2,
-                balances,
-                amountsOut,
-                bptTotalSupply,
-                currentInvariant,
-                swapFee
-            );
+        CustomMath.calcBptInGivenExactTokensOut(
+            CustomMath.Curve(amp1, D1, amp2, D2),
+            balances,
+            amountsOut,
+            bptTotalSupply,
+            swapFee
+        );
     }
 
     function getTokenBalanceGivenInvariantAndAllOtherBalances(
         uint256 amplificationParameter1,
-        uint256 amplificationParameter2,
         uint256[] memory balances,
         uint256 currentInvariant,
         uint256 tokenIndex
-    ) external pure returns (uint256) {
+    ) external view returns (uint256) {
         return
-            CustomMath._getTokenBalanceGivenInvariantAndAllOtherBalances(
-                amplificationParameter1,
-                amplificationParameter2,
-                balances,
-                currentInvariant,
-                tokenIndex
-            );
+        StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(
+            amplificationParameter1,
+            balances,
+            currentInvariant,
+            tokenIndex
+        );
     }
 
     function getRate(
@@ -171,7 +165,7 @@ contract MockCustomMath {
         uint256 amp1,
         uint256 amp2,
         uint256 supply
-    ) external pure returns (uint256) {
-        return CustomMath._getRate(balances, amp1, amp2, supply);
+    ) external view returns (uint256) {
+        return CustomMath.getRate(balances, amp1, amp2, supply);
     }
 }

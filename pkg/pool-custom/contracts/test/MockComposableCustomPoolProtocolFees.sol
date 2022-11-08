@@ -28,72 +28,55 @@ contract MockComposableCustomPoolProtocolFees is ComposableCustomPoolProtocolFee
         uint256[] memory tokenRateCacheDurations,
         bool[] memory exemptFromYieldProtocolFeeFlags
     )
-        ComposableCustomPoolStorage(
-            StorageParams({
-                registeredTokens: _insertSorted(tokens, IERC20(this)),
-                tokenRateProviders: tokenRateProviders,
-                exemptFromYieldProtocolFeeFlags: exemptFromYieldProtocolFeeFlags
-            })
-        )
-        ComposableCustomPoolRates(
-            RatesParams({
-                tokens: tokens,
-                rateProviders: tokenRateProviders,
-                tokenRateCacheDurations: tokenRateCacheDurations
-            })
-        )
-        ProtocolFeeCache(protocolFeeProvider, ProtocolFeeCache.DELEGATE_PROTOCOL_SWAP_FEES_SENTINEL)
-        BasePool(
-            vault,
-            IVault.PoolSpecialization.GENERAL,
-            "MockCustomPoolStorage",
-            "MOCK_BPT",
-            _insertSorted(tokens, IERC20(this)),
-            new address[](tokens.length + 1),
-            1e12, // BasePool._MIN_SWAP_FEE_PERCENTAGE
-            0,
-            0,
-            address(0)
-        )
+    ComposableCustomPoolStorage(
+        StorageParams({
+    registeredTokens : _insertSorted(tokens, IERC20(this)),
+    tokenRateProviders : tokenRateProviders,
+    exemptFromYieldProtocolFeeFlags : exemptFromYieldProtocolFeeFlags
+    })
+    )
+    ComposableCustomPoolRates(
+        RatesParams({
+    tokens : tokens,
+    rateProviders : tokenRateProviders,
+    tokenRateCacheDurations : tokenRateCacheDurations
+    })
+    )
+    ProtocolFeeCache(protocolFeeProvider, ProtocolFeeCache.DELEGATE_PROTOCOL_SWAP_FEES_SENTINEL)
+    BasePool(
+        vault,
+        IVault.PoolSpecialization.GENERAL,
+        "MockCustomPoolStorage",
+        "MOCK_BPT",
+        _insertSorted(tokens, IERC20(this)),
+        new address[](tokens.length + 1),
+        1e12, // BasePool._MIN_SWAP_FEE_PERCENTAGE
+        0,
+        0,
+        address(0)
+    )
     {
         // solhint-disable-previous-line no-empty-blocks
     }
 
     function payProtocolFeesBeforeJoinExit(
         uint256[] memory registeredBalances,
-        uint256 lastJoinExitAmp1,
-        uint256 lastJoinExitAmp2,
-        uint256 lastPostJoinExitInvariant
-    ) external returns (uint256 virtualSupply, uint256[] memory balances) {
-        (virtualSupply, balances, ) = _payProtocolFeesBeforeJoinExit(
-            registeredBalances,
-            lastJoinExitAmp1,
-            lastJoinExitAmp2,
-            lastPostJoinExitInvariant
-        );
+        CustomMath.Curve memory lastJoinExitCurve
+    ) external returns (uint256, uint256[] memory) {
+        (uint256 virtualSupply, uint256[] memory balances,,) = _payProtocolFeesBeforeJoinExit(registeredBalances, lastJoinExitCurve);
+        return (virtualSupply, balances);
     }
 
     function updateInvariantAfterJoinExit(
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256[] memory balances,
-        uint256 preJoinExitInvariant,
-        uint256 preJoinExitSupply,
-        uint256 postJoinExitSupply
+        CustomMath.Curve memory curve, uint256[] memory balances, uint256 preJoinExitSupply, uint256 postJoinExitSupply
     ) external {
-        return
-            _updateInvariantAfterJoinExit(
-                currentAmp1,
-                currentAmp2,
-                balances,
-                preJoinExitInvariant,
-                preJoinExitSupply,
-                postJoinExitSupply
-            );
+        return _updateInvariantAfterJoinExit(curve, balances, preJoinExitSupply, postJoinExitSupply);
     }
 
-    function updatePostJoinExit(uint256 currentAmp1, uint256 currentAmp2, uint256 postJoinExitInvariant) external {
-        _updatePostJoinExit(currentAmp1, currentAmp2, postJoinExitInvariant);
+    function updatePostJoinExit(
+        uint256 currentAmp1, uint256 postJoinExitInvariant1, uint256 currentAmp2, uint256 postJoinExitInvariant2
+    ) external {
+        _updatePostJoinExit(CustomMath.Curve(currentAmp1, postJoinExitInvariant1, currentAmp2, postJoinExitInvariant2));
     }
 
     function setTotalSupply(uint256 newSupply) external {
@@ -101,29 +84,23 @@ contract MockComposableCustomPoolProtocolFees is ComposableCustomPoolProtocolFee
     }
 
     function getGrowthInvariants(uint256[] memory balances, uint256 lastPostJoinExitAmp1, uint256 lastPostJoinExitAmp2)
-        external
-        view
-        returns (
-            uint256 swapFeeGrowthInvariant,
-            uint256 totalNonExemptGrowthInvariant,
-            uint256 totalGrowthInvariant
-        )
+    external
+    view
+    returns (
+        uint256 currentCurve,
+        uint256 swapFeeGrowthInvariant,
+        uint256 totalNonExemptGrowthInvariant,
+        uint256 totalGrowthInvariant
+    )
     {
         return _getGrowthInvariants(balances, lastPostJoinExitAmp1, lastPostJoinExitAmp2);
     }
 
     function getProtocolPoolOwnershipPercentage(
         uint256[] memory balances,
-        uint256 lastJoinExitAmp1,
-        uint256 lastJoinExitAmp2,
-        uint256 lastPostJoinExitInvariant
+        CustomMath.Curve memory lastJoinExitCurve
     ) external view returns (uint256) {
-        (uint256 percentage, ) = _getProtocolPoolOwnershipPercentage(
-            balances,
-            lastJoinExitAmp1,
-            lastJoinExitAmp2,
-            lastPostJoinExitInvariant
-        );
+        (uint256 percentage,,) = _getProtocolPoolOwnershipPercentage(balances, lastJoinExitCurve);
         return percentage;
     }
 

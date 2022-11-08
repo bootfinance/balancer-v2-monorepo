@@ -49,11 +49,11 @@ import "./CustomMath.sol";
  * a useful value: we rely on the 'virtual supply' (how much BPT is actually owned outside the Vault) instead.
  */
 contract ComposableCustomPool is
-    IRateProvider,
-    BaseGeneralPool,
-    CustomPoolAmplification,
-    ComposableCustomPoolRates,
-    ComposableCustomPoolProtocolFees
+IRateProvider,
+BaseGeneralPool,
+CustomPoolAmplification,
+ComposableCustomPoolRates,
+ComposableCustomPoolProtocolFees
 {
     using FixedPoint for uint256;
     using PriceRateCache for bytes32;
@@ -62,7 +62,7 @@ contract ComposableCustomPool is
 
     // The maximum imposed by the Vault, which stores balances in a packed format, is 2**(112) - 1.
     // We are preminting half of that value (rounded up).
-    uint256 private constant _PREMINTED_TOKEN_BALANCE = 2**(111);
+    uint256 private constant _PREMINTED_TOKEN_BALANCE = 2 ** (111);
 
     // The constructor arguments are received in a struct to work around stack-too-deep issues
     struct NewPoolParams {
@@ -83,52 +83,52 @@ contract ComposableCustomPool is
     }
 
     constructor(NewPoolParams memory params)
-        BasePool(
-            params.vault,
-            IVault.PoolSpecialization.GENERAL,
-            params.name,
-            params.symbol,
-            _insertSorted(params.tokens, IERC20(this)),
-            new address[](params.tokens.length + 1),
-            params.swapFeePercentage,
-            params.pauseWindowDuration,
-            params.bufferPeriodDuration,
-            params.owner
-        )
-        CustomPoolAmplification(params.amplificationParameter1, params.amplificationParameter2)
-        ComposableCustomPoolStorage(_extractStorageParams(params))
-        ComposableCustomPoolRates(_extractRatesParams(params))
-        ProtocolFeeCache(params.protocolFeeProvider, ProtocolFeeCache.DELEGATE_PROTOCOL_SWAP_FEES_SENTINEL)
+    BasePool(
+        params.vault,
+        IVault.PoolSpecialization.GENERAL,
+        params.name,
+        params.symbol,
+        _insertSorted(params.tokens, IERC20(this)),
+        new address[](params.tokens.length + 1),
+        params.swapFeePercentage,
+        params.pauseWindowDuration,
+        params.bufferPeriodDuration,
+        params.owner
+    )
+    CustomPoolAmplification(params.amplificationParameter1, params.amplificationParameter2)
+    ComposableCustomPoolStorage(_extractStorageParams(params))
+    ComposableCustomPoolRates(_extractRatesParams(params))
+    ProtocolFeeCache(params.protocolFeeProvider, ProtocolFeeCache.DELEGATE_PROTOCOL_SWAP_FEES_SENTINEL)
     {
         // solhint-disable-previous-line no-empty-blocks
     }
 
     // Translate parameters to avoid stack-too-deep issues in the constructor
     function _extractRatesParams(NewPoolParams memory params)
-        private
-        pure
-        returns (ComposableCustomPoolRates.RatesParams memory)
+    private
+    pure
+    returns (ComposableCustomPoolRates.RatesParams memory)
     {
         return
-            ComposableCustomPoolRates.RatesParams({
-                tokens: params.tokens,
-                rateProviders: params.rateProviders,
-                tokenRateCacheDurations: params.tokenRateCacheDurations
-            });
+        ComposableCustomPoolRates.RatesParams({
+        tokens : params.tokens,
+        rateProviders : params.rateProviders,
+        tokenRateCacheDurations : params.tokenRateCacheDurations
+        });
     }
 
     // Translate parameters to avoid stack-too-deep issues in the constructor
     function _extractStorageParams(NewPoolParams memory params)
-        private
-        view
-        returns (ComposableCustomPoolStorage.StorageParams memory)
+    private
+    view
+    returns (ComposableCustomPoolStorage.StorageParams memory)
     {
         return
-            ComposableCustomPoolStorage.StorageParams({
-                registeredTokens: _insertSorted(params.tokens, IERC20(this)),
-                tokenRateProviders: params.rateProviders,
-                exemptFromYieldProtocolFeeFlags: params.exemptFromYieldProtocolFeeFlags
-            });
+        ComposableCustomPoolStorage.StorageParams({
+        registeredTokens : _insertSorted(params.tokens, IERC20(this)),
+        tokenRateProviders : params.rateProviders,
+        exemptFromYieldProtocolFeeFlags : params.exemptFromYieldProtocolFeeFlags
+        });
     }
 
     /**
@@ -180,15 +180,15 @@ contract ComposableCustomPool is
         uint256[] memory scalingFactors
     ) internal virtual override returns (uint256) {
         return
-            (swapRequest.tokenIn == IERC20(this) || swapRequest.tokenOut == IERC20(this))
-                ? _swapWithBpt(swapRequest, registeredBalances, registeredIndexIn, registeredIndexOut, scalingFactors)
-                : super._swapGivenIn(
-                    swapRequest,
-                    registeredBalances,
-                    registeredIndexIn,
-                    registeredIndexOut,
-                    scalingFactors
-                );
+        (swapRequest.tokenIn == IERC20(this) || swapRequest.tokenOut == IERC20(this))
+        ? _swapWithBpt(swapRequest, registeredBalances, registeredIndexIn, registeredIndexOut, scalingFactors)
+        : super._swapGivenIn(
+            swapRequest,
+            registeredBalances,
+            registeredIndexIn,
+            registeredIndexOut,
+            scalingFactors
+        );
     }
 
     /**
@@ -211,15 +211,15 @@ contract ComposableCustomPool is
         uint256[] memory scalingFactors
     ) internal virtual override returns (uint256) {
         return
-            (swapRequest.tokenIn == IERC20(this) || swapRequest.tokenOut == IERC20(this))
-                ? _swapWithBpt(swapRequest, registeredBalances, registeredIndexIn, registeredIndexOut, scalingFactors)
-                : super._swapGivenOut(
-                    swapRequest,
-                    registeredBalances,
-                    registeredIndexIn,
-                    registeredIndexOut,
-                    scalingFactors
-                );
+        (swapRequest.tokenIn == IERC20(this) || swapRequest.tokenOut == IERC20(this))
+        ? _swapWithBpt(swapRequest, registeredBalances, registeredIndexIn, registeredIndexOut, scalingFactors)
+        : super._swapGivenOut(
+            swapRequest,
+            registeredBalances,
+            registeredIndexIn,
+            registeredIndexOut,
+            scalingFactors
+        );
     }
 
     /**
@@ -234,13 +234,13 @@ contract ComposableCustomPool is
         uint256 registeredIndexOut
     ) internal virtual override returns (uint256) {
         return
-            _onRegularSwap(OnRegularSwapParams(
+        _onRegularSwap(OnRegularSwapParams(
                 true, // given in
                 request.amount,
                 registeredBalances,
                 registeredIndexIn,
                 registeredIndexOut)
-            );
+        );
     }
 
     /**
@@ -255,13 +255,13 @@ contract ComposableCustomPool is
         uint256 registeredIndexOut
     ) internal virtual override returns (uint256) {
         return
-            _onRegularSwap(OnRegularSwapParams(
+        _onRegularSwap(OnRegularSwapParams(
                 false, // given out
                 request.amount,
                 registeredBalances,
                 registeredIndexIn,
                 registeredIndexOut)
-            );
+        );
     }
 
     /**
@@ -282,15 +282,18 @@ contract ComposableCustomPool is
         uint256 indexIn = _skipBptIndex(params.registeredIndexIn);
         uint256 indexOut = _skipBptIndex(params.registeredIndexOut);
 
-        (uint256 currentAmp1, ) = _getAmplificationParameter1();
-        (uint256 currentAmp2, ) = _getAmplificationParameter2();
-        uint256 invariant = CustomMath._calculateInvariant(currentAmp1, currentAmp2, balances);
+        // current As
+        (uint256 A1,) = _getAmplificationParameter1();
+        (uint256 A2,) = _getAmplificationParameter2();
 
+        uint256 curve;
+        uint256 quantityOut;
         if (params.isGivenIn) {
-            return CustomMath._calcOutGivenIn(currentAmp1, currentAmp2, balances, indexIn, indexOut, params.amountGiven, invariant);
+            (curve, quantityOut) = CustomMath.calcOutGivenIn(A1, A2, balances, indexIn, indexOut, params.amountGiven);
         } else {
-            return CustomMath._calcInGivenOut(currentAmp1, currentAmp2, balances, indexIn, indexOut, params.amountGiven, invariant);
+            (curve, quantityOut) = CustomMath.calcInGivenOut(A1, A2, balances, indexIn, indexOut, params.amountGiven);
         }
+        return quantityOut;
     }
 
     /**
@@ -313,6 +316,7 @@ contract ComposableCustomPool is
         // isGivenIn = swapRequest.kind == IVault.SwapKind.GIVEN_IN;
 
         _upscaleArray(registeredBalances, scalingFactors);
+
         swapRequest.amount = _upscale(
             swapRequest.amount,
             scalingFactors[swapRequest.kind == IVault.SwapKind.GIVEN_IN ? registeredIndexIn : registeredIndexOut]
@@ -322,40 +326,30 @@ contract ComposableCustomPool is
 
         // These calls mutate `balances` so that it holds the post join-exit balances.
         (uint256 amountCalculated, uint256 postJoinExitSupply) = registeredIndexOut == getBptIndex()
-            ? _doJoinSwap(
-                swapRequest.kind == IVault.SwapKind.GIVEN_IN,
-                swapRequest.amount,
-                rets.balances,
-                _skipBptIndex(registeredIndexIn),
-                rets.currentAmp1,
-                rets.currentAmp2,
-                rets.preJoinExitSupply,
-                rets.preJoinExitInvariant
-            )
-            : _doExitSwap(
-                swapRequest.kind == IVault.SwapKind.GIVEN_IN,
-                swapRequest.amount,
-                rets.balances,
-                _skipBptIndex(registeredIndexOut),
-                rets.currentAmp1,
-                rets.currentAmp2,
-                rets.preJoinExitSupply,
-                rets.preJoinExitInvariant
-            );
-
-        _updateInvariantAfterJoinExit(
-            rets.currentAmp1,
-            rets.currentAmp2,
+        ? _doJoinSwap(
+            swapRequest.kind == IVault.SwapKind.GIVEN_IN,
+            swapRequest.amount,
             rets.balances,
-            rets.preJoinExitInvariant,
-            rets.preJoinExitSupply,
-            postJoinExitSupply
+            _skipBptIndex(registeredIndexIn),
+            rets.curve,
+            rets.preJoinExitSupply
+        )
+        : _doExitSwap(
+            swapRequest.kind == IVault.SwapKind.GIVEN_IN,
+            swapRequest.amount,
+            rets.balances,
+            _skipBptIndex(registeredIndexOut),
+            rets.curve,
+            rets.preJoinExitSupply
         );
 
+        _updateInvariantAfterJoinExit(rets.curve, rets.balances, rets.preJoinExitSupply, postJoinExitSupply);
+
         return
-            swapRequest.kind == IVault.SwapKind.GIVEN_IN
-                ? _downscaleDown(amountCalculated, scalingFactors[registeredIndexOut]) // Amount out, round down
-                : _downscaleUp(amountCalculated, scalingFactors[registeredIndexIn]); // Amount in, round up
+        swapRequest.kind == IVault.SwapKind.GIVEN_IN
+        ? _downscaleDown(amountCalculated, scalingFactors[registeredIndexOut]) // Amount out, round down
+        : _downscaleUp(amountCalculated, scalingFactors[registeredIndexIn]);
+        // Amount in, round up
     }
 
     /**
@@ -367,31 +361,12 @@ contract ComposableCustomPool is
         uint256 amount,
         uint256[] memory balances,
         uint256 indexIn,
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256 virtualSupply,
-        uint256 preJoinExitInvariant
+        CustomMath.Curve memory curve,
+        uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
-        return
-            isGivenIn
-                ? _joinSwapExactTokenInForBptOut(
-                    amount,
-                    balances,
-                    indexIn,
-                    currentAmp1,
-                    currentAmp2,
-                    virtualSupply,
-                    preJoinExitInvariant
-                )
-                : _joinSwapExactBptOutForTokenIn(
-                    amount,
-                    balances,
-                    indexIn,
-                    currentAmp1,
-                    currentAmp2,
-                    virtualSupply,
-                    preJoinExitInvariant
-                );
+        return isGivenIn
+        ? _joinSwapExactTokenInForBptOut(amount, balances, indexIn, curve, virtualSupply)
+        : _joinSwapExactBptOutForTokenIn(amount, balances, indexIn, curve, virtualSupply);
     }
 
     /**
@@ -403,23 +378,19 @@ contract ComposableCustomPool is
         uint256 amountIn,
         uint256[] memory balances,
         uint256 indexIn,
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256 virtualSupply,
-        uint256 preJoinExitInvariant
+        CustomMath.Curve memory curve,
+        uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
         // The CustomMath function was created with joins in mind, so it expects a full amounts array. We create an
         // empty one and only set the amount for the token involved.
         uint256[] memory amountsIn = new uint256[](balances.length);
         amountsIn[indexIn] = amountIn;
 
-        uint256 bptOut = CustomMath._calcBptOutGivenExactTokensIn(
-            currentAmp1,
-            currentAmp2,
+        uint256 bptOut = CustomMath.calcBptOutGivenExactTokensIn(
+            curve,
             balances,
             amountsIn,
             virtualSupply,
-            preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -438,19 +409,15 @@ contract ComposableCustomPool is
         uint256 bptOut,
         uint256[] memory balances,
         uint256 indexIn,
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256 virtualSupply,
-        uint256 preJoinExitInvariant
+        CustomMath.Curve memory curve,
+        uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
-        uint256 amountIn = CustomMath._calcTokenInGivenExactBptOut(
-            currentAmp1,
-            currentAmp2,
+        uint256 amountIn = CustomMath.calcTokenInGivenExactBptOut(
+            curve,
             balances,
             indexIn,
             bptOut,
             virtualSupply,
-            preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -469,31 +436,13 @@ contract ComposableCustomPool is
         uint256 amount,
         uint256[] memory balances,
         uint256 indexOut,
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256 virtualSupply,
-        uint256 preJoinExitInvariant
+        CustomMath.Curve memory curve,
+        uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
         return
-            isGivenIn
-                ? _exitSwapExactBptInForTokenOut(
-                    amount,
-                    balances,
-                    indexOut,
-                    currentAmp1,
-                    currentAmp2,
-                    virtualSupply,
-                    preJoinExitInvariant
-                )
-                : _exitSwapExactTokenOutForBptIn(
-                    amount,
-                    balances,
-                    indexOut,
-                    currentAmp1,
-                    currentAmp2,
-                    virtualSupply,
-                    preJoinExitInvariant
-                );
+        isGivenIn
+        ? _exitSwapExactBptInForTokenOut(amount, balances, indexOut, curve, virtualSupply)
+        : _exitSwapExactTokenOutForBptIn(amount, balances, indexOut, curve, virtualSupply);
     }
 
     /**
@@ -505,19 +454,15 @@ contract ComposableCustomPool is
         uint256 bptAmount,
         uint256[] memory balances,
         uint256 indexOut,
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256 virtualSupply,
-        uint256 preJoinExitInvariant
+        CustomMath.Curve memory curve,
+        uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
-        uint256 amountOut = CustomMath._calcTokenOutGivenExactBptIn(
-            currentAmp1,
-            currentAmp2,
+        uint256 amountOut = CustomMath.calcTokenOutGivenExactBptIn(
+            curve,
             balances,
             indexOut,
             bptAmount,
             virtualSupply,
-            preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -536,25 +481,15 @@ contract ComposableCustomPool is
         uint256 amountOut,
         uint256[] memory balances,
         uint256 indexOut,
-        uint256 currentAmp1,
-        uint256 currentAmp2,
-        uint256 virtualSupply,
-        uint256 preJoinExitInvariant
+        CustomMath.Curve memory curve,
+        uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
         // The CustomMath function was created with exits in mind, so it expects a full amounts array. We create an
         // empty one and only set the amount for the token involved.
         uint256[] memory amountsOut = new uint256[](balances.length);
         amountsOut[indexOut] = amountOut;
 
-        uint256 bptAmount = CustomMath._calcBptInGivenExactTokensOut(
-            currentAmp1,
-            currentAmp2,
-            balances,
-            amountsOut,
-            virtualSupply,
-            preJoinExitInvariant,
-            getSwapFeePercentage()
-        );
+        uint256 bptAmount = CustomMath.calcBptInGivenExactTokensOut(curve, balances, amountsOut, virtualSupply, getSwapFeePercentage());
 
         balances[indexOut] = balances[indexOut].sub(amountOut);
         uint256 postJoinExitSupply = virtualSupply.sub(bptAmount);
@@ -587,13 +522,14 @@ contract ComposableCustomPool is
         InputHelpers.ensureInputLengthMatch(amountsInIncludingBpt.length, scalingFactors.length);
         _upscaleArray(amountsInIncludingBpt, scalingFactors);
 
-        (uint256 amp1, ) = _getAmplificationParameter1();
-        (uint256 amp2, ) = _getAmplificationParameter2();
+        (uint256 amp1,) = _getAmplificationParameter1();
+        (uint256 amp2,) = _getAmplificationParameter2();
         uint256[] memory amountsIn = _dropBptItem(amountsInIncludingBpt);
-        uint256 invariantAfterJoin = CustomMath._calculateInvariant(amp1, amp2, amountsIn);
+        (uint256 invariantAfterJoin1, uint256 invariantAfterJoin2) = CustomMath.calculateInvariants(amp1, amp2, amountsIn);
 
         // Set the initial BPT to the value of the invariant
-        uint256 bptAmountOut = invariantAfterJoin;
+        // TODO: we are using the first invariant. Could do the other.
+        uint256 bptAmountOut = invariantAfterJoin1;
 
         // BasePool will mint bptAmountOut for the sender: we then also mint the remaining BPT to make up the total
         // supply, and have the Vault pull those tokens from the sender as part of the join.
@@ -608,7 +544,7 @@ contract ComposableCustomPool is
         amountsInIncludingBpt[getBptIndex()] = initialBpt;
 
         // Initialization is still a join, so we need to do post-join work.
-        _updatePostJoinExit(amp1, amp2, invariantAfterJoin);
+        _updatePostJoinExit(CustomMath.Curve(amp1, invariantAfterJoin1, amp2, invariantAfterJoin2));
 
         return (bptAmountOut, amountsInIncludingBpt);
     }
@@ -659,19 +595,14 @@ contract ComposableCustomPool is
 
         BeforeJoinExitReturn memory rets = _beforeJoinExit(registeredBalances);
 
-        function(DoJoinParams memory, bytes memory)
-                internal
-                view
-                returns (uint256, uint256[] memory) _doJoinOrExit
-         = (isJoin ? _doJoin : _doExit);
+        function(DoJoinParams memory, bytes memory) internal view returns (uint256, uint256[] memory) _doJoinOrExit
+        = (isJoin ? _doJoin : _doExit);
 
         (uint256 bptAmount, uint256[] memory amountsDelta) = _doJoinOrExit(
             DoJoinParams(
+                rets.curve,
                 rets.balances,
-                rets.currentAmp1,
-                rets.currentAmp2,
                 rets.preJoinExitSupply,
-                rets.preJoinExitInvariant,
                 scalingFactors),
             userData
         );
@@ -685,10 +616,8 @@ contract ComposableCustomPool is
         // Pass in the post-join balances to reset the protocol fee basis.
         // We are minting bptAmount, increasing the total (and virtual) supply post-join
         _updateInvariantAfterJoinExit(
-            rets.currentAmp1,
-            rets.currentAmp2,
+            rets.curve,
             rets.balances,
-            rets.preJoinExitInvariant,
             rets.preJoinExitSupply,
             postJoinExitSupply
         );
@@ -702,31 +631,50 @@ contract ComposableCustomPool is
      * @dev Pay any due protocol fees and calculate values necessary for performing the join/exit.
      */
     struct BeforeJoinExitReturn {
-         uint256 preJoinExitSupply;
-         uint256[] balances;
-         uint256 currentAmp1;
-         uint256 currentAmp2;
-         uint256 preJoinExitInvariant;
+        uint256 preJoinExitSupply;
+        uint256[] balances;
+        CustomMath.Curve curve;
     }
 
     function _beforeJoinExit(uint256[] memory registeredBalances) internal returns (BeforeJoinExitReturn memory)
     {
-        (uint256 lastJoinExitAmp1, uint256 lastJoinExitAmp2, uint256 lastPostJoinExitInvariant) = getLastJoinExitData();
-        // TODO: make sure the below is right (DONE)
+        // last post re-balance curve
+        CustomMath.Curve memory lastC = getLastJoinExitData();
+
         (
-            uint256 preJoinExitSupply,
-            uint256[] memory balances,
-            uint256 oldAmpPreJoinExitInvariant
-        ) = _payProtocolFeesBeforeJoinExit(registeredBalances, lastJoinExitAmp1, lastJoinExitAmp2, lastPostJoinExitInvariant);
+        uint256 preJoinExitSupply,
+        uint256[] memory balances,
+        uint256 curve,
+        uint256 oldAmpPreJoinExitInvariant
+        ) = _payProtocolFeesBeforeJoinExit(registeredBalances, lastC);
 
         // If the amplification factor is the same as it was during the last join/exit then we can reuse the
         // value calculated using the "old" amplification factor. If not, then we have to calculate this now.
-        (uint256 currentAmp1, ) = _getAmplificationParameter1();
-        (uint256 currentAmp2, ) = _getAmplificationParameter2();
-        uint256 preJoinExitInvariant = (currentAmp1 == lastJoinExitAmp1) && (currentAmp2 == lastJoinExitAmp2)
+        (uint256 currentA1,) = _getAmplificationParameter1();
+        (uint256 currentA2,) = _getAmplificationParameter2();
+
+        // regardless of which curve we are on we need to both invariants updated
+        uint256 preJoinExitInvariant1;
+        uint256 preJoinExitInvariant2;
+        // TODO: use same calculateInvariant;
+        if (curve == 0) {
+            preJoinExitInvariant1 = (currentA1 == lastC.A1)
             ? oldAmpPreJoinExitInvariant
-            : CustomMath._calculateInvariant(currentAmp1, currentAmp2, balances);
-        return BeforeJoinExitReturn(preJoinExitSupply, balances, currentAmp1, currentAmp2, preJoinExitInvariant);
+            : CustomMath.calculateInvariant(currentA1, currentA2, balances, 1);
+            preJoinExitInvariant2 = CustomMath.calculateInvariant(currentA1, currentA2, balances, 2);
+            // assert preJoinExitInvariant1 ==  CustomMath._calculateInvariant(currentAmp1, E);
+        } else {
+            preJoinExitInvariant2 = (currentA2 == lastC.A2)
+            ? oldAmpPreJoinExitInvariant
+            : CustomMath.calculateInvariant(currentA1, currentA2, balances, 2);
+            preJoinExitInvariant1 = CustomMath.calculateInvariant(currentA1, currentA2, balances, 1);
+        }
+
+        return BeforeJoinExitReturn(
+            preJoinExitSupply,
+            balances,
+            CustomMath.Curve(currentA1, preJoinExitInvariant1, currentA2, preJoinExitInvariant2)
+        );
     }
 
     /**
@@ -734,11 +682,9 @@ contract ComposableCustomPool is
      */
 
     struct DoJoinParams {
+        CustomMath.Curve curve;
         uint256[] balances;
-        uint256 currentAmp1;
-        uint256 currentAmp2;
         uint256 preJoinExitSupply;
-        uint256 preJoinExitInvariant;
         uint256[] scalingFactors;
     }
 
@@ -765,13 +711,11 @@ contract ComposableCustomPool is
         // The user-provided amountsIn is unscaled, so we address that.
         _upscaleArray(amountsIn, _dropBptItem(params.scalingFactors));
 
-        uint256 bptAmountOut = CustomMath._calcBptOutGivenExactTokensIn(
-            params.currentAmp1,
-            params.currentAmp2,
+        uint256 bptAmountOut = CustomMath.calcBptOutGivenExactTokensIn(
+            params.curve,
             params.balances,
             amountsIn,
             params.preJoinExitSupply, // = virtualSupply,
-            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -797,14 +741,12 @@ contract ComposableCustomPool is
         uint256[] memory amountsIn = new uint256[](params.balances.length);
 
         // And then assign the result to the selected token.
-        amountsIn[tokenIndex] = CustomMath._calcTokenInGivenExactBptOut(
-            params.currentAmp1,
-            params.currentAmp2,
+        amountsIn[tokenIndex] = CustomMath.calcTokenInGivenExactBptOut(
+            params.curve,
             params.balances,
             tokenIndex,
             bptAmountOut,
             params.preJoinExitSupply, // = virtualSupply,
-            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -840,13 +782,11 @@ contract ComposableCustomPool is
         // The user-provided amountsIn is unscaled, so we address that.
         _upscaleArray(amountsOut, _dropBptItem(params.scalingFactors));
 
-        uint256 bptAmountIn = CustomMath._calcBptInGivenExactTokensOut(
-            params.currentAmp1,
-            params.currentAmp2,
+        uint256 bptAmountIn = CustomMath.calcBptInGivenExactTokensOut(
+            params.curve,
             params.balances,
             amountsOut,
             params.preJoinExitSupply, // virtualSupply,
-            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
         _require(bptAmountIn <= maxBPTAmountIn, Errors.BPT_IN_MAX_AMOUNT);
@@ -858,11 +798,11 @@ contract ComposableCustomPool is
      * @dev Single-token exit, equivalent to swapping BPT for a pool token.
      */
 
-//    params.preJoinExitSupply, virtualSupply
-//                params.preJoinExitInvariant,
-//                params.currentAmp1,
-//                params.currentAmp2,
-//                params.balances,
+    //    params.preJoinExitSupply, virtualSupply
+    //                params.preJoinExitInvariant,
+    //                params.currentAmp1,
+    //                params.currentAmp2,
+    //                params.balances,
 
     function _exitExactBPTInForTokenOut(DoJoinParams memory params, bytes memory userData)
     private view returns (uint256, uint256[] memory) {
@@ -876,14 +816,12 @@ contract ComposableCustomPool is
         uint256[] memory amountsOut = new uint256[](params.balances.length);
 
         // And then assign the result to the selected token.
-        amountsOut[tokenIndex] = CustomMath._calcTokenOutGivenExactBptIn(
-            params.currentAmp1,
-            params.currentAmp2,
+        amountsOut[tokenIndex] = CustomMath.calcTokenOutGivenExactBptIn(
+            params.curve,
             params.balances,
             tokenIndex,
             bptAmountIn,
             params.preJoinExitSupply, // = virtualSupply,
-            params.preJoinExitInvariant,
             getSwapFeePercentage()
         );
 
@@ -920,15 +858,15 @@ contract ComposableCustomPool is
      * Because of preminted BPT, it uses `getVirtualSupply` instead of `totalSupply`.
      */
     function getRate() public view virtual override returns (uint256) {
-        (, uint256[] memory balancesIncludingBpt, ) = getVault().getPoolTokens(getPoolId());
+        (, uint256[] memory balancesIncludingBpt,) = getVault().getPoolTokens(getPoolId());
         _upscaleArray(balancesIncludingBpt, _scalingFactors());
 
         (uint256 virtualSupply, uint256[] memory balances) = _dropBptItemFromBalances(balancesIncludingBpt);
 
-        (uint256 currentAmp1, ) = _getAmplificationParameter1();
-        (uint256 currentAmp2, ) = _getAmplificationParameter2();
+        (uint256 currentAmp1,) = _getAmplificationParameter1();
+        (uint256 currentAmp2,) = _getAmplificationParameter2();
 
-        return CustomMath._getRate(balances, currentAmp1, currentAmp2, virtualSupply);
+        return CustomMath.getRate(balances, currentAmp1, currentAmp2, virtualSupply);
     }
 
     // Helpers
@@ -958,18 +896,18 @@ contract ComposableCustomPool is
      * it only calls super.
      */
     function _isOwnerOnlyAction(bytes32 actionId)
-        internal
-        view
-        virtual
-        override(
-            // Our inheritance pattern creates a small diamond that requires explicitly listing the parents here.
-            // Each parent calls the `super` version, so linearization ensures all implementations are called.
-            BasePool,
-            ComposableCustomPoolProtocolFees,
-            CustomPoolAmplification,
-            ComposableCustomPoolRates
-        )
-        returns (bool)
+    internal
+    view
+    virtual
+    override(
+    // Our inheritance pattern creates a small diamond that requires explicitly listing the parents here.
+    // Each parent calls the `super` version, so linearization ensures all implementations are called.
+    BasePool,
+    ComposableCustomPoolProtocolFees,
+    CustomPoolAmplification,
+    ComposableCustomPoolRates
+    )
+    returns (bool)
     {
         return super._isOwnerOnlyAction(actionId);
     }

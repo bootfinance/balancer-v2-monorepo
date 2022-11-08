@@ -23,12 +23,13 @@ import "@balancer-labs/v2-pool-utils/contracts/InvariantGrowthProtocolSwapFees.s
 import "./ComposableCustomPoolStorage.sol";
 import "./ComposableCustomPoolRates.sol";
 import "./CustomMath.sol";
+
 import "hardhat/console.sol";
 
 abstract contract ComposableCustomPoolProtocolFees is
-    ComposableCustomPoolStorage,
-    ComposableCustomPoolRates,
-    ProtocolFeeCache
+ComposableCustomPoolStorage,
+ComposableCustomPoolRates,
+ProtocolFeeCache
 {
     using FixedPoint for uint256;
     using WordCodec for bytes32;
@@ -47,44 +48,38 @@ abstract contract ComposableCustomPoolProtocolFees is
     // [ last join-exit amplification  | last post join-exit invariant ]
     // [           23 bits             |            233 bits           ]
 
-    // [ A1      | A2       | last post join-exit invariant ]
-    // [ 23 bits |  23 bits |           210 bits           ]
+    // TODO FIX ME: for custom swap we need two amp factors
 
-    // TODO FIX ME: for custom swap we need two amp factors, we will store them in the same data structure
-    bytes32 private _lastJoinExitData;
+    bytes32 private _lastJoinExitData1;
+    bytes32 private _lastJoinExitData2;
 
     uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION_SIZE = 23;
-    uint256 private constant _LAST_POST_JOIN_EXIT_INVARIANT_SIZE = 256 - 23 - 23;
+    uint256 private constant _LAST_POST_JOIN_EXIT_INVARIANT_SIZE = 256 - 23;
     uint256 private constant _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET = 0;
-    uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION1_OFFSET = _LAST_POST_JOIN_EXIT_INVARIANT_SIZE;
-    uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION2_OFFSET = _LAST_POST_JOIN_EXIT_INVARIANT_SIZE + _LAST_JOIN_EXIT_AMPLIFICATION_SIZE;
+    uint256 private constant _LAST_JOIN_EXIT_AMPLIFICATION_OFFSET = _LAST_POST_JOIN_EXIT_INVARIANT_SIZE;
 
     /**
      * @dev
      * Calculates protocol fee due originating from accumulated swap fees and yield of non-exempt tokens,
      * pays the fee by minting BPT and returns the updated virtual supply and current balances.
      */
-    function _payProtocolFeesBeforeJoinExit(
-        uint256[] memory registeredBalances,
-        uint256 lastJoinExitAmp1,
-        uint256 lastJoinExitAmp2,
-        uint256 lastPostJoinExitInvariant
+    function _payProtocolFeesBeforeJoinExit(uint256[] memory registeredBalances, CustomMath.Curve memory lastJoinExitCurve)
+    internal returns (
+        uint256,
+        uint256[] memory,
+        uint256,
+        uint256
     )
-        internal
-        returns (
-            uint256,
-            uint256[] memory,
-            uint256
-        )
     {
         (uint256 virtualSupply, uint256[] memory balances) = _dropBptItemFromBalances(registeredBalances);
 
         // First, we'll compute what percentage of the Pool the protocol should own due to charging protocol fees on
         // swap fees and yield.
         (
-            uint256 expectedProtocolOwnershipPercentage,
-            uint256 totalGrowthInvariant
-        ) = _getProtocolPoolOwnershipPercentage(balances, lastJoinExitAmp1, lastJoinExitAmp2, lastPostJoinExitInvariant);
+        uint256 expectedProtocolOwnershipPercentage,
+        uint256 curve,
+        uint256 totalGrowthInvariant
+        ) = _getProtocolPoolOwnershipPercentage(balances, lastJoinExitCurve);
 
         // Now that we know what percentage of the Pool's current value the protocol should own, we can compute how
         // much BPT we need to mint to get to this state. Since we're going to mint BPT for the protocol, the value
@@ -103,15 +98,12 @@ abstract contract ComposableCustomPoolProtocolFees is
         // supply by minting the protocol fee tokens, so those are included in the return value.
         //
         // For this addition to overflow, the actual total supply would have already overflowed.
-        return (virtualSupply + protocolFeeAmount, balances, totalGrowthInvariant);
+        return (virtualSupply + protocolFeeAmount, balances, curve, totalGrowthInvariant);
     }
 
-    function _getProtocolPoolOwnershipPercentage(
-        uint256[] memory balances,
-        uint256 lastJoinExitAmp1,
-        uint256 lastJoinExitAmp2,
-        uint256 lastPostJoinExitInvariant
-    ) internal view returns (uint256, uint256) {
+    function _getProtocolPoolOwnershipPercentage(uint256[] memory balances, CustomMath.Curve memory lastJoinExitCurve)
+    internal view returns (uint256, uint256, uint256)
+    {
         // We compute three invariants, adjusting the balances of tokens that have rate providers by undoing the current
         // rate adjustment and then applying the old rate. This is equivalent to multiplying by old rate / current rate.
         //
@@ -130,10 +122,11 @@ abstract contract ComposableCustomPoolProtocolFees is
         // invariant.
 
         (
-            uint256 swapFeeGrowthInvariant,
-            uint256 totalNonExemptGrowthInvariant,
-            uint256 totalGrowthInvariant
-        ) = _getGrowthInvariants(balances, lastJoinExitAmp1, lastJoinExitAmp2);
+        uint256 currentCurve,
+        uint256 swapFeeGrowthInvariant,
+        uint256 totalNonExemptGrowthInvariant,
+        uint256 totalGrowthInvariant
+        ) = _getGrowthInvariants(balances, lastJoinExitCurve.A1, lastJoinExitCurve.A2);
 
         // By comparing the invariant increase attributable to each source of growth to the total growth invariant,
         // we can calculate how much of the current Pool value originates from that source, and then apply the
@@ -158,15 +151,15 @@ abstract contract ComposableCustomPoolProtocolFees is
         //   │   original value      │   │   │   │   │  last post join-exit invariant
         //   └───────────────────────┘ ──┘ ──┘ ──┘ ──┘
         //
-        // Each invariant should be larger than its precedessor. In case any rounding error results in them being
+        // Each invariant should be larger than its predecessor. In case any rounding error results in them being
         // smaller, we adjust the subtraction to equal 0.
 
-        uint256 swapFeeGrowthInvariantDelta = (swapFeeGrowthInvariant > lastPostJoinExitInvariant)
-            ? swapFeeGrowthInvariant - lastPostJoinExitInvariant
-            : 0;
+        uint256 lastD = currentCurve == 1 ? lastJoinExitCurve.D1 : lastJoinExitCurve.D2;
+        uint256 swapFeeGrowthInvariantDelta = swapFeeGrowthInvariant > lastD ? swapFeeGrowthInvariant - lastD : 0;
+
         uint256 nonExemptYieldGrowthInvariantDelta = (totalNonExemptGrowthInvariant > swapFeeGrowthInvariant)
-            ? totalNonExemptGrowthInvariant - swapFeeGrowthInvariant
-            : 0;
+        ? totalNonExemptGrowthInvariant - swapFeeGrowthInvariant
+        : 0;
 
         // We can now derive what percentage of the Pool's total value each invariant delta represents by dividing by
         // the total growth invariant. These values, multiplied by the protocol fee percentage for each growth type,
@@ -176,31 +169,36 @@ abstract contract ComposableCustomPoolProtocolFees is
             getProtocolFeePercentageCache(ProtocolFeeType.SWAP)
         );
 
+        // For the time being and to simplify handling two curves we assume Yield Protocol Fee Percentage of ZERO
         uint256 protocolYieldPercentage = nonExemptYieldGrowthInvariantDelta.divDown(totalGrowthInvariant).mulDown(
             getProtocolFeePercentageCache(ProtocolFeeType.YIELD)
         );
 
         // These percentages can then be simply added to compute the total protocol Pool ownership percentage.
         // This is naturally bounded above by FixedPoint.ONE so this addition cannot overflow.
-        return (protocolSwapFeePercentage + protocolYieldPercentage, totalGrowthInvariant);
+        return (protocolSwapFeePercentage + protocolYieldPercentage, currentCurve, totalGrowthInvariant);
     }
 
     function _getGrowthInvariants(uint256[] memory balances, uint256 lastJoinExitAmp1, uint256 lastJoinExitAmp2)
-        internal
-        view
-        returns (
-            uint256 swapFeeGrowthInvariant,
-            uint256 totalNonExemptGrowthInvariant,
-            uint256 totalGrowthInvariant
-        )
+    internal
+    view
+    returns (
+        uint256 currentCurve,
+        uint256 swapFeeGrowthInvariant,
+        uint256 totalNonExemptGrowthInvariant,
+        uint256 totalGrowthInvariant
+    )
     {
         // We always calculate the swap fee growth invariant, since we cannot easily know whether swap fees have
         // accumulated or not.
+        currentCurve = CustomMath.getCurve(balances);
 
-        swapFeeGrowthInvariant = CustomMath._calculateInvariant(
+        // Adjust all balances
+        swapFeeGrowthInvariant = CustomMath.calculateInvariant(
             lastJoinExitAmp1,
             lastJoinExitAmp2,
-            _getAdjustedBalances(balances, true) // Adjust all balances
+            _getAdjustedBalances(balances, true),
+            currentCurve
         );
 
         // For the other invariants, we can potentially skip some work. In the edge cases where none or all of the
@@ -211,25 +209,42 @@ abstract contract ComposableCustomPoolProtocolFees is
             // growth: all yield growth is non-exempt. There's also no point in adjusting balances, since we
             // already know none are exempt.
 
-            totalNonExemptGrowthInvariant = CustomMath._calculateInvariant(lastJoinExitAmp1, lastJoinExitAmp2, balances);
+            totalNonExemptGrowthInvariant = CustomMath.calculateInvariant(
+                lastJoinExitAmp1,
+                lastJoinExitAmp2,
+                balances,
+                currentCurve
+            );
             totalGrowthInvariant = totalNonExemptGrowthInvariant;
+
         } else if (_areAllTokensExempt()) {
             // If no tokens are charged fees on yield, then the non-exempt growth is equal to the swap fee growth - no
             // yield fees will be collected.
 
             totalNonExemptGrowthInvariant = swapFeeGrowthInvariant;
-            totalGrowthInvariant = CustomMath._calculateInvariant(lastJoinExitAmp1, lastJoinExitAmp2, balances);
+            totalGrowthInvariant = CustomMath.calculateInvariant(
+                lastJoinExitAmp1,
+                lastJoinExitAmp2,
+                balances,
+                currentCurve
+            );
         } else {
             // In the general case, we need to calculate two invariants: one with some adjusted balances, and one with
             // the current balances.
 
-            totalNonExemptGrowthInvariant = CustomMath._calculateInvariant(
+            totalNonExemptGrowthInvariant = CustomMath.calculateInvariant(
                 lastJoinExitAmp1,
                 lastJoinExitAmp2,
-                _getAdjustedBalances(balances, false) // Only adjust non-exempt balances
+                _getAdjustedBalances(balances, false), // Only adjust non-exempt balances
+                currentCurve
             );
 
-            totalGrowthInvariant = CustomMath._calculateInvariant(lastJoinExitAmp1, lastJoinExitAmp2, balances);
+            totalGrowthInvariant = CustomMath.calculateInvariant(
+                lastJoinExitAmp1,
+                lastJoinExitAmp2,
+                balances,
+                currentCurve
+            );
         }
     }
 
@@ -240,10 +255,8 @@ abstract contract ComposableCustomPoolProtocolFees is
      * Pay protocol fees due on any current join or exit swap.
      */
     function _updateInvariantAfterJoinExit(
-        uint256 currentAmp1,
-        uint256 currentAmp2,
+        CustomMath.Curve memory curve,
         uint256[] memory balances,
-        uint256 preJoinExitInvariant,
         uint256 preJoinExitSupply,
         uint256 postJoinExitSupply
     ) internal {
@@ -256,10 +269,15 @@ abstract contract ComposableCustomPoolProtocolFees is
         // Note that the pre-join/exit invariant is *not* the invariant from the last join,
         // but computed from the balances before this particular join/exit.
 
-        uint256 postJoinExitInvariant = CustomMath._calculateInvariant(currentAmp1, currentAmp2, balances);
+        (uint256 postJED1, uint256 postJED2)
+        = CustomMath.calculateInvariants(curve.A1, curve.A2, balances);
+
+        uint256 invariantGrowthRatio1 = postJED1.divDown(curve.D1);
+        uint256 invariantGrowthRatio2 = postJED2.divDown(curve.D2);
+        // TODO: assert invariantGrowthRatio1 == invariantGrowthRatio2
 
         uint256 protocolFeeAmount = InvariantGrowthProtocolSwapFees.calcDueProtocolFees(
-            postJoinExitInvariant.divDown(preJoinExitInvariant),
+            invariantGrowthRatio1,
             preJoinExitSupply,
             postJoinExitSupply,
             getProtocolFeePercentageCache(ProtocolFeeType.SWAP)
@@ -269,7 +287,7 @@ abstract contract ComposableCustomPoolProtocolFees is
             _payProtocolFees(protocolFeeAmount);
         }
 
-        _updatePostJoinExit(currentAmp1, currentAmp2, postJoinExitInvariant);
+        _updatePostJoinExit(CustomMath.Curve(curve.A1, postJED1, curve.A2, postJED2));
     }
 
     /**
@@ -277,12 +295,14 @@ abstract contract ComposableCustomPoolProtocolFees is
      * swap fees. Also copy the current rates to the old rates, to establish the new protocol yield basis for protocol
      * yield fees.
      */
-    function _updatePostJoinExit(uint256 currentAmp1, uint256 currentAmp2, uint256 postJoinExitInvariant) internal {
-        // TODO: How do we store currentAmp2? FIXED
-        _lastJoinExitData =
-            WordCodec.encodeUint(currentAmp1, _LAST_JOIN_EXIT_AMPLIFICATION1_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE) |
-            WordCodec.encodeUint(currentAmp2, _LAST_JOIN_EXIT_AMPLIFICATION2_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE) |
-            WordCodec.encodeUint(postJoinExitInvariant, _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET, _LAST_POST_JOIN_EXIT_INVARIANT_SIZE);
+    function _updatePostJoinExit(CustomMath.Curve memory curve) internal {
+        _lastJoinExitData1 =
+        WordCodec.encodeUint(curve.A1, _LAST_JOIN_EXIT_AMPLIFICATION_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE) |
+        WordCodec.encodeUint(curve.D1, _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET, _LAST_POST_JOIN_EXIT_INVARIANT_SIZE);
+
+        _lastJoinExitData2 =
+        WordCodec.encodeUint(curve.A2, _LAST_JOIN_EXIT_AMPLIFICATION_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE) |
+        WordCodec.encodeUint(curve.D2, _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET, _LAST_POST_JOIN_EXIT_INVARIANT_SIZE);
 
         _updateOldRates();
     }
@@ -291,9 +311,9 @@ abstract contract ComposableCustomPoolProtocolFees is
      * @dev Adjust a protocol fee percentage calculated before minting, to the equivalent value after minting.
      */
     function _calculateAdjustedProtocolFeeAmount(uint256 supply, uint256 basePercentage)
-        internal
-        pure
-        returns (uint256)
+    internal
+    pure
+    returns (uint256)
     {
         // Since this fee amount will be minted as BPT, which increases the total supply, we need to mint
         // slightly more so that it reflects this percentage of the total supply after minting.
@@ -309,31 +329,17 @@ abstract contract ComposableCustomPoolProtocolFees is
     /**
      * @notice Return the amplification factor and invariant as of the most recent join or exit (including BPT swaps)
      */
-    function getLastJoinExitData()
-        public
-        view
-        returns (uint256 lastJoinExitAmplification1, uint256 lastJoinExitAmplification2, uint256 lastPostJoinExitInvariant)
+    function getLastJoinExitData() public view returns (CustomMath.Curve memory curve)
     {
-        bytes32 rawData = _lastJoinExitData;
+        bytes32 rawData1 = _lastJoinExitData1;
+        uint256 A1 = rawData1.decodeUint(_LAST_JOIN_EXIT_AMPLIFICATION_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE);
+        uint256 D1 = rawData1.decodeUint(_LAST_POST_JOIN_EXIT_INVARIANT_OFFSET, _LAST_POST_JOIN_EXIT_INVARIANT_SIZE);
 
-        // TODO FIX ME: we need to store both factors, for now just return the first (DONE)
+        bytes32 rawData2 = _lastJoinExitData2;
+        uint256 A2 = rawData2.decodeUint(_LAST_JOIN_EXIT_AMPLIFICATION_OFFSET, _LAST_JOIN_EXIT_AMPLIFICATION_SIZE);
+        uint256 D2 = rawData2.decodeUint(_LAST_POST_JOIN_EXIT_INVARIANT_OFFSET, _LAST_POST_JOIN_EXIT_INVARIANT_SIZE);
 
-        lastJoinExitAmplification1 = rawData.decodeUint(
-            _LAST_JOIN_EXIT_AMPLIFICATION1_OFFSET,
-            _LAST_JOIN_EXIT_AMPLIFICATION_SIZE
-        );
-
-        lastJoinExitAmplification2 = rawData.decodeUint(
-            _LAST_JOIN_EXIT_AMPLIFICATION2_OFFSET,
-            _LAST_JOIN_EXIT_AMPLIFICATION_SIZE
-        );
-
-        lastPostJoinExitInvariant = rawData.decodeUint(
-            _LAST_POST_JOIN_EXIT_INVARIANT_OFFSET,
-            _LAST_POST_JOIN_EXIT_INVARIANT_SIZE
-        );
-        // console.log("LJE",lastJoinExitAmplification1,lastJoinExitAmplification2,lastPostJoinExitInvariant);
-
+        return CustomMath.Curve(A1, D1, A2, D2);
     }
 
     /**
@@ -341,17 +347,17 @@ abstract contract ComposableCustomPoolProtocolFees is
      * it only calls super.
      */
     function _isOwnerOnlyAction(bytes32 actionId)
-        internal
-        view
-        virtual
-        override(
-            // Our inheritance pattern creates a small diamond that requires explicitly listing the parents here.
-            // Each parent calls the `super` version, so linearization ensures all implementations are called.
-            BasePool,
-            BasePoolAuthorization,
-            ComposableCustomPoolRates
-        )
-        returns (bool)
+    internal
+    view
+    virtual
+    override(
+    // Our inheritance pattern creates a small diamond that requires explicitly listing the parents here.
+    // Each parent calls the `super` version, so linearization ensures all implementations are called.
+    BasePool,
+    BasePoolAuthorization,
+    ComposableCustomPoolRates
+    )
+    returns (bool)
     {
         return super._isOwnerOnlyAction(actionId);
     }

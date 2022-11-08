@@ -16,395 +16,502 @@ pragma solidity ^0.7.0;
 
 import "@balancer-labs/v2-solidity-utils/contracts/math/FixedPoint.sol";
 import "@balancer-labs/v2-solidity-utils/contracts/math/Math.sol";
+import "./StableMath.sol";
 import "hardhat/console.sol";
 
-// These functions start with an underscore, as if they were part of a contract and not a library. At some point this
-// should be fixed. Additionally, some variables have non mixed case names (e.g. P_D) that relate to the mathematical
-// derivations.
 // solhint-disable private-vars-leading-underscore, var-name-mixedcase
 
 library CustomMath {
+
     using FixedPoint for uint256;
 
     uint256 internal constant _MIN_AMP = 1;
     uint256 internal constant _MAX_AMP = 5000;
     uint256 internal constant _AMP_PRECISION = 1e3;
-
     uint256 internal constant _MAX_CUSTOM_TOKENS = 2;
 
-    // Note on unchecked arithmetic:
-    // This contract performs a large number of additions, subtractions, multiplications and divisions, often inside
-    // loops. Since many of these operations are gas-sensitive (as they happen e.g. during a swap), it is important to
-    // not make any unnecessary checks. We rely on a set of invariants to avoid having to use checked arithmetic (the
-    // Math library), including:
-    //  - the number of tokens is bounded by _MAX_CUSTOM_TOKENS
-    //  - the amplification parameter is bounded by _MAX_AMP * _AMP_PRECISION, which fits in 23 bits
-    //  - the token balances are bounded by 2^112 (guaranteed by the Vault) times 1e18 (the maximum scaling factor),
-    //    which fits in 172 bits
-    //
-    // This means e.g. we can safely multiply a balance by the amplification parameter without worrying about overflow.
+    struct Curve {
+        uint256 A1;
+        uint256 D1;
+        uint256 A2;
+        uint256 D2;
+    }
 
-    // About swap fees on joins and exits:
-    // Any join or exit that is not perfectly balanced (e.g. all single token joins or exits) is mathematically
-    // equivalent to a perfectly balanced join or  exit followed by a series of swaps. Since these swaps would charge
-    // swap fees, it follows that (some) joins and exits should as well.
-    // On these operations, we split the token amounts in 'taxable' and 'non-taxable' portions, where the 'taxable' part
-    // is the one to which swap fees are applied.
+    function getRate(
+        uint256[] memory B,
+        uint256 A1,
+        uint256 A2,
+        uint256 supply
+    ) internal view returns (uint256) {
+        // When calculating the current BPT rate, we may not have paid the protocol fees, therefore
+        // the invariant should be smaller than its current value. Then, we round down overall.
+        uint256 curve = 1;
+        uint256 D1 = calculateInvariant(A1, A2, B, curve);
+        return D1.divDown(supply);
+    }
 
-    // Computes the invariant given the current balances, using the Newton-Raphson approximation.
-    // The amplification parameter equals: A n^(n-1)
-    // See: https://github.com/curvefi/curve-contract/blob/b0bbf77f8f93c9c5f4e415bce9cd71f0cdee960e/contracts/pool-templates/base/SwapTemplateBase.vy#L206
-    // solhint-disable-previous-line max-line-length
-    function _calculateInvariant(uint256 amplificationParameter1, uint256 amplificationParameter2, uint256[] memory balances)
-        internal
-        pure
-        returns (uint256)
-    {
-        /**********************************************************************************************
-        // invariant                                                                                 //
-        // D = invariant                                                  D^(n+1)                    //
-        // A = amplification coefficient      A  n^n S + D = A D n^n + -----------                   //
-        // S = sum of balances                                             n^n P                     //
-        // P = product of balances                                                                   //
-        // n = number of tokens                                                                      //
-        **********************************************************************************************/
-
-        // Always round down, to match Vyper's arithmetic (which always truncates).
-
-        uint256 sum = 0; // S in the Curve version
-        uint256 numTokens = balances.length;
-
-//        if (numTokens > 2) {
-//            for (uint256 i = 0; i < numTokens; i++) {
-//                console.log(i, balances[i]);
-//            }
-//        }
-        for (uint256 i = 0; i < numTokens; i++) {
-            sum = sum.add(balances[i]);
+    function getCurve(
+        uint256[] memory B
+    ) internal view returns (uint256) {
+        if (B[0] < B[1]) {
+            return 1;
+        } else {
+            return 2;
         }
-        if (sum == 0) {
-            return 0;
-        }
+    }
 
-        uint256 prevInvariant; // Dprev in the Curve version
-        uint256 invariant = sum; // D in the Curve version
-        uint256 ampTimesTotal = amplificationParameter1 * numTokens; // Ann in the Curve version
+    function _calcZ(
+        uint256 A, uint256 D
+    ) internal view returns (uint256[] memory ZZ) {
+        // Rounds result up overall
+        uint256 D2 = Math.mul(D, D);
+        uint256 D3 = Math.mul(D, D2);
+        uint256 a = A * 2;
+
+        uint256 b = D.sub(
+            Math.mul(
+                Math.divUp(D, Math.mul(2, a)),
+                _AMP_PRECISION
+            )
+        );
+
+        uint256 c = Math.mul(
+            Math.divUp(D3, Math.mul(8, a)),
+            _AMP_PRECISION
+        );
+
+        uint256 Z = Math.divUp(b.add(Math.divUp(c, D2)), 2);
+
+        uint256 Zp = 0;
 
         for (uint256 i = 0; i < 255; i++) {
-            uint256 D_P = invariant;
 
-            for (uint256 j = 0; j < numTokens; j++) {
-                // (D_P * invariant) / (balances[j] * numTokens)
-                D_P = Math.divDown(Math.mul(D_P, invariant), Math.mul(balances[j], numTokens));
-            }
+            Zp = Z;
 
-            prevInvariant = invariant;
+            Z = Math.divUp(b.add(Math.divUp(c, Math.mul(Z, Z))), 2);
 
-            invariant = Math.divDown(
-                Math.mul(
-                    // (ampTimesTotal * sum) / AMP_PRECISION + D_P * numTokens
-                    (Math.divDown(Math.mul(ampTimesTotal, sum), _AMP_PRECISION).add(Math.mul(D_P, numTokens))),
-                    invariant
-                ),
-                // ((ampTimesTotal - _AMP_PRECISION) * invariant) / _AMP_PRECISION + (numTokens + 1) * D_P
-                (
-                    Math.divDown(Math.mul((ampTimesTotal - _AMP_PRECISION), invariant), _AMP_PRECISION).add(
-                        Math.mul((numTokens + 1), D_P)
-                    )
-                )
-            );
-
-            if (invariant > prevInvariant) {
-                if (invariant - prevInvariant <= 1) {
-                    // console.log(amplificationParameter1, balances[0], balances[1], invariant);
-                    return invariant;
+            if (Z > Zp) {
+                if (Z - Zp <= 1) {
+                    ZZ = new uint256[](2);
+                    ZZ[0] = Z;
+                    ZZ[1] = Z;
+                    console.log("sol: calcZ A, D Z i");
+                    console.log(i, A, D, Z);
+                    return ZZ;
                 }
-            } else if (prevInvariant - invariant <= 1) {
-                // console.log(amplificationParameter1, balances[0], balances[1], invariant);
-                return invariant;
+            } else if (Zp - Z <= 1) {
+                ZZ = new uint256[](2);
+                ZZ[0] = Z;
+                ZZ[1] = Z;
+                console.log("sol: calcZ i, A, D Z");
+                console.log(i, A, D, Z);
+                return ZZ;
             }
         }
-        // TODO: Add new error code to Errors
-        // _revert(Errors.CUSTOM_INVARIANT_DIDNT_CONVERGE);
-        _revert(Errors.STABLE_INVARIANT_DIDNT_CONVERGE);
-        return 0;
+
+        _revert(Errors.STABLE_GET_BALANCE_DIDNT_CONVERGE);
+
+        ZZ = new uint256[](2);
+        return ZZ;
     }
 
-    // Computes how many tokens can be taken out of a pool if `tokenAmountIn` are sent, given the current balances.
-    // The amplification parameter equals: A n^(n-1)
-    function _calcOutGivenIn(
-        uint256 amplificationParameter1,
-        uint256 amplificationParameter2,
-        uint256[] memory balances,
-        uint256 tokenIndexIn,
-        uint256 tokenIndexOut,
-        uint256 tokenAmountIn,
-        uint256 invariant
-    ) internal pure returns (uint256) {
-        /**************************************************************************************************************
-        // outGivenIn token x for y - polynomial equation to solve                                                   //
-        // ay = amount out to calculate                                                                              //
-        // by = balance token out                                                                                    //
-        // y = by - ay (finalBalanceOut)                                                                             //
-        // D = invariant                                               D                     D^(n+1)                 //
-        // A = amplification coefficient               y^2 + ( S - ----------  - D) * y -  ------------- = 0         //
-        // n = number of tokens                                    (A * n^n)               A * n^2n * P              //
-        // S = sum of final balances but y                                                                           //
-        // P = product of final balances but y                                                                       //
-        **************************************************************************************************************/
+    // A1, A2 - amplification factors
+    // B - token balances
+    // Ct - target curve (1 or 2)
+    function calculateInvariant(
+        uint256 A1, uint256 A2, uint256[] memory B, uint256 Ct
+    ) internal view returns (uint256)
+    {
 
-        // Amount out, so we round down overall.
-        balances[tokenIndexIn] = balances[tokenIndexIn].add(tokenAmountIn);
+        console.log("sol: calculateInvariant");
+        console.log("sol: A1=", A1, "A2=", A2);
+        console.log("sol: B=", B[0], B[1], B.length);
 
-        uint256 finalBalanceOut = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amplificationParameter1,
-            amplificationParameter2,
-            balances,
-            invariant,
-            tokenIndexOut
-        );
+        uint256 C = getCurve(B);
 
-        // No need to use checked arithmetic since `tokenAmountIn` was actually added to the same balance right before
-        // calling `_getTokenBalanceGivenInvariantAndAllOtherBalances` which doesn't alter the balances array.
-        balances[tokenIndexIn] = balances[tokenIndexIn] - tokenAmountIn;
+        if (C == Ct) {
+            if (C == 1) {
+                return StableMath.__calculateInvariant(A1, B);
+            } else {
+                return StableMath.__calculateInvariant(A2, B);
+            }
+        } else {
+            if (C == 1) {
+                uint256 D1 = StableMath.__calculateInvariant(A1, B);
+                uint256[] memory Z = _calcZ(A1, D1);
+                uint256 DZ = StableMath.__calculateInvariant(A2, Z);
+                // console.log("curve 3 D1", D1, DZ, D1 - DZ);
+                return DZ;
+            } else {
+                uint256 D2 = StableMath.__calculateInvariant(A2, B);
+                uint256[] memory Z = _calcZ(A2, D2);
+                return StableMath.__calculateInvariant(A1, Z);
+            }
+        }
 
-        return balances[tokenIndexOut].sub(finalBalanceOut).sub(1);
     }
 
-    // Computes how many tokens must be sent to a pool if `tokenAmountOut` are sent given the
-    // current balances, using the Newton-Raphson approximation.
-    // The amplification parameter equals: A n^(n-1)
-    function _calcInGivenOut(
-        uint256 amplificationParameter1,
-        uint256 amplificationParameter2,
-        uint256[] memory balances,
-        uint256 tokenIndexIn,
-        uint256 tokenIndexOut,
-        uint256 tokenAmountOut,
-        uint256 invariant
-    ) internal pure returns (uint256) {
-        /**************************************************************************************************************
-        // inGivenOut token x for y - polynomial equation to solve                                                   //
-        // ax = amount in to calculate                                                                               //
-        // bx = balance token in                                                                                     //
-        // x = bx + ax (finalBalanceIn)                                                                              //
-        // D = invariant                                                D                     D^(n+1)                //
-        // A = amplification coefficient               x^2 + ( S - ----------  - D) * x -  ------------- = 0         //
-        // n = number of tokens                                     (A * n^n)               A * n^2n * P             //
-        // S = sum of final balances but x                                                                           //
-        // P = product of final balances but x                                                                       //
-        **************************************************************************************************************/
+    function calculateInvariants(
+        uint256 A1, uint256 A2, uint256[] memory B
+    ) internal view returns (uint256, uint256)
+    {
+        uint256 D1;
+        uint256 D2;
+        if (getCurve(B) == 1) {
+            D1 = StableMath.__calculateInvariant(A1, B);
+            D2 = StableMath.__calculateInvariant(A2, _calcZ(A1, D1));
+        } else {
+            D2 = StableMath.__calculateInvariant(A2, B);
+            D1 = StableMath.__calculateInvariant(A1, _calcZ(A2, D2));
+        }
 
-        // Amount in, so we round up overall.
-        balances[tokenIndexOut] = balances[tokenIndexOut].sub(tokenAmountOut);
+        return (D1, D2);
 
-        uint256 finalBalanceIn = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amplificationParameter1,
-            amplificationParameter2,
-            balances,
-            invariant,
-            tokenIndexIn
-        );
-
-        // No need to use checked arithmetic since `tokenAmountOut` was actually subtracted from the same balance right
-        // before calling `_getTokenBalanceGivenInvariantAndAllOtherBalances` which doesn't alter the balances array.
-        balances[tokenIndexOut] = balances[tokenIndexOut] + tokenAmountOut;
-
-        return finalBalanceIn.sub(balances[tokenIndexIn]).add(1);
     }
 
-    function _calcBptOutGivenExactTokensIn(
-        uint256 amp1,
-        uint256 amp2,
-        uint256[] memory balances,
-        uint256[] memory amountsIn,
-        uint256 bptTotalSupply,
-        uint256 currentInvariant,
-        uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    // TRADE
+    // Bb - balance before the trade
+    function calcOutGivenIn(
+        uint256 A1, uint256 A2, uint256[] memory B, uint256 tokenIndexIn, uint256 tokenIndexOut, uint256 tokenAmountIn
+    ) internal view returns (uint256, uint256) {
+
+        uint256 curveIn = getCurve(B);
+        uint256 curveOut;
+
+        // balance after the trade
+        uint256 [] memory Ba = new uint256[](2);
+        Ba[tokenIndexIn] = B[tokenIndexIn].add(tokenAmountIn);
+        Ba[tokenIndexOut] = B[tokenIndexOut];
+
+        if (curveIn == 1) {
+            uint256 D1 = StableMath.__calculateInvariant(A1, B);
+            Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexOut);
+
+            if (Ba[0] <= Ba[1]) {
+                // we are on curve 1 so we are okay
+                curveOut = 1;
+            } else {
+                // we are on curve 2, so we should have used A2/D2
+                uint256 [] memory Z = _calcZ(A1, D1);
+                uint256 D2 = StableMath.__calculateInvariant(A2, Z);
+                Ba[tokenIndexIn] = B[tokenIndexIn].add(tokenAmountIn);
+                Ba[tokenIndexOut] = B[tokenIndexOut];
+                // ??
+                Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexOut);
+                curveOut = 2;
+            }
+        } else {
+            uint256 D2 = StableMath.__calculateInvariant(A2, B);
+            Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexOut);
+
+            if (Ba[0] > Ba[1]) {
+                // we are on curve 2 so we are okay
+                curveOut = 2;
+            } else {
+                // we are on curve 1, so we should have used A1/D1
+                uint256 [] memory Z = _calcZ(A2, D2);
+                uint256 D1 = StableMath.__calculateInvariant(A1, Z);
+                Ba[tokenIndexIn] = B[tokenIndexIn].add(tokenAmountIn);
+                Ba[tokenIndexOut] = B[tokenIndexOut];
+                Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexOut);
+                curveOut = 1;
+            }
+        }
+
+        return (curveOut, B[tokenIndexOut].sub(Ba[tokenIndexOut]).sub(1));
+
+    }
+
+    function calcInGivenOut(
+        uint256 A1, uint256 A2, uint256[] memory B, uint256 tokenIndexIn, uint256 tokenIndexOut, uint256 tokenAmountOut
+    ) internal view returns (uint256, uint256) {
+
+        uint256 curveIn = getCurve(B);
+        uint256 curveOut;
+
+        uint256 [] memory Ba = new uint256[](2);
+        Ba[tokenIndexIn] = B[tokenIndexIn];
+        Ba[tokenIndexOut] = B[tokenIndexOut].sub(tokenAmountOut);
+
+
+        if (curveIn == 1) {
+            uint256 D1 = StableMath.__calculateInvariant(A1, B);
+            Ba[tokenIndexIn] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexIn);
+
+            if (Ba[0] <= Ba[1]) {
+                // we are on curve 1 so we are okay
+                curveOut = 1;
+            } else {
+                // we are on curve 2, so we should have used A2/D2
+                uint256 [] memory Z = _calcZ(A1, D1);
+                uint256 D2 = StableMath.__calculateInvariant(A2, Z);
+                Ba[tokenIndexIn] = B[tokenIndexIn];
+                Ba[tokenIndexOut] = B[tokenIndexOut].sub(tokenAmountOut);
+                // ??
+                Ba[tokenIndexIn] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexIn);
+                curveOut = 2;
+            }
+        } else {
+            uint256 D2 = StableMath.__calculateInvariant(A2, B);
+            Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexIn);
+
+            if (Ba[0] > Ba[1]) {
+                // we are on curve 2 so we are okay
+                curveOut = 2;
+            } else {
+                // we are on curve 1, so we should have used A1/D1
+                uint256 [] memory Z = _calcZ(A2, D2);
+                uint256 D1 = StableMath.__calculateInvariant(A1, Z);
+                Ba[tokenIndexIn] = B[tokenIndexIn];
+                Ba[tokenIndexOut] = B[tokenIndexOut].sub(tokenAmountOut);
+                Ba[tokenIndexIn] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexIn);
+                curveOut = 1;
+            }
+        }
+
+        return (curveOut, B[tokenIndexIn].sub(Ba[tokenIndexIn]).add(1));
+
+    }
+
+    // REBALANCE - ISSUE/MINT
+
+    // A1, A2 - amplification factors
+    // Bb - balances before rebalance
+    // dBb - exact token balances to add (in)
+    // fee - swap fee percentage
+    // Qbpt - total quantity of BPT
+    function calcBptOutGivenExactTokensIn(
+        Curve memory C, uint256[] memory Bb, uint256[] memory dBb, uint256 Qbpt, uint256 fee
+    ) internal view returns (uint256) {
+
         // BPT out, so we round down overall.
 
         // First loop calculates the sum of all token balances, which will be used to calculate
         // the current weights of each token, relative to this sum
-        uint256 sumBalances = 0;
-        for (uint256 i = 0; i < balances.length; i++) {
-            sumBalances = sumBalances.add(balances[i]);
+        uint256 sum = 0;
+        for (uint256 i = 0; i < Bb.length; i++) {
+            sum = sum.add(Bb[i]);
         }
 
         // Calculate the weighted balance ratio without considering fees
-        uint256[] memory balanceRatiosWithFee = new uint256[](amountsIn.length);
-        // The weighted sum of token balance ratios with fee
-        uint256 invariantRatioWithFees = 0;
-        for (uint256 i = 0; i < balances.length; i++) {
-            uint256 currentWeight = balances[i].divDown(sumBalances);
-            balanceRatiosWithFee[i] = balances[i].add(amountsIn[i]).divDown(balances[i]);
-            invariantRatioWithFees = invariantRatioWithFees.add(balanceRatiosWithFee[i].mulDown(currentWeight));
+        uint256[] memory R = new uint256[](dBb.length);
+        // The weighted sum of token balance ratios without considering fees
+        uint256 Rw = 0;
+        for (uint256 i = 0; i < Bb.length; i++) {
+            // current weight
+            uint256 Wc = Bb[i].divDown(sum);
+            R[i] = Bb[i].add(dBb[i]).divDown(Bb[i]);
+            Rw = Rw.add(R[i].mulDown(Wc));
         }
 
-        // Second loop calculates new amounts in, taking into account the fee on the percentage excess
-        uint256[] memory newBalances = new uint256[](balances.length);
-        for (uint256 i = 0; i < balances.length; i++) {
-            uint256 amountInWithoutFee;
-
+        // Second loop calculates new quantities in, taking into account the fee on the percentage excess
+        // Ba - balances after rebalance
+        uint256[] memory Ba = new uint256[](Bb.length);
+        for (uint256 i = 0; i < Bb.length; i++) {
+            // quantity to add after subtracting fees
+            uint256 dBi;
             // Check if the balance ratio is greater than the ideal ratio to charge fees or not
-            if (balanceRatiosWithFee[i] > invariantRatioWithFees) {
-                uint256 nonTaxableAmount = balances[i].mulDown(invariantRatioWithFees.sub(FixedPoint.ONE));
-                uint256 taxableAmount = amountsIn[i].sub(nonTaxableAmount);
+            if (R[i] > Rw) {
+                // tax-free portion
+                uint256 dBf = Bb[i].mulDown(Rw.sub(FixedPoint.ONE));
+                // taxable portion
+                uint256 dBt = dBb[i].sub(dBf);
                 // No need to use checked arithmetic for the swap fee, it is guaranteed to be lower than 50%
-                amountInWithoutFee = nonTaxableAmount.add(taxableAmount.mulDown(FixedPoint.ONE - swapFeePercentage));
+                dBi = dBf.add(dBt.mulDown(FixedPoint.ONE - fee));
             } else {
-                amountInWithoutFee = amountsIn[i];
+                dBi = dBb[i];
             }
-
-            newBalances[i] = balances[i].add(amountInWithoutFee);
+            Ba[i] = Bb[i].add(dBi);
         }
 
-        uint256 newInvariant = _calculateInvariant(amp1, amp2, newBalances);
-        uint256 invariantRatio = newInvariant.divDown(currentInvariant);
+        // which curve are we on?
+        uint256 curve = getCurve(Ba);
+        // what is the new invariant for the curve
+        uint256 Dc = calculateInvariant(C.A1, C.A2, Ba, curve);
 
+        // how much did the invariant grow?
+        // we both invariants before this rebalance - they should correspond to Bb & A1/A2.
+        uint256 Rinv;
+        if (curve == 1) {
+            Rinv = Dc.divDown(C.D1);
+        } else {
+            Rinv = Dc.divDown(C.D2);
+        }
         // If the invariant didn't increase for any reason, we simply don't mint BPT
-        if (invariantRatio > FixedPoint.ONE) {
-            return bptTotalSupply.mulDown(invariantRatio - FixedPoint.ONE);
+        if (Rinv > FixedPoint.ONE) {
+            return Qbpt.mulDown(Rinv - FixedPoint.ONE);
         } else {
             return 0;
         }
     }
 
-    function _calcTokenInGivenExactBptOut(
-        uint256 amp1,
-        uint256 amp2,
-        uint256[] memory balances,
-        uint256 tokenIndex,
-        uint256 bptAmountOut,
-        uint256 bptTotalSupply,
-        uint256 currentInvariant,
-        uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    // A1, A2, D1, D2 - current curves
+    // B - token balances
+    // Qbpt - total supply of BPT
+    // dQbpt - exact quantity of BPT out
+    // fee - swap fee percentage
+
+    function calcTokenInGivenExactBptOut(
+        Curve memory C, uint256[] memory B, uint256 tokenIndex, uint256 dQbpt, uint256 Qbpt, uint256 fee
+    ) internal view returns (uint256) {
         // Token in, so we round up overall.
 
-        uint256 newInvariant = bptTotalSupply.add(bptAmountOut).divUp(bptTotalSupply).mulUp(currentInvariant);
-
+        uint256 R = Qbpt.add(dQbpt).divUp(Qbpt);
+        // both A1/D1 and A2/D2 will give us the same side, in other words we can determine which side of x=y we are on.
+        uint256 newD1 = R.mulUp(C.D1);
         // Calculate amount in without fee.
-        uint256 newBalanceTokenIndex = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amp1,
-            amp2,
-            balances,
-            newInvariant,
-            tokenIndex
-        );
-        uint256 amountInWithoutFee = newBalanceTokenIndex.sub(balances[tokenIndex]);
+        uint256 newBalanceTokenIndex = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(C.A1, B, newD1, tokenIndex);
+
+        uint256[] memory newB = new uint256[](2);
+        newB[tokenIndex] = newBalanceTokenIndex;
+        newB[1 - tokenIndex] = B[1 - tokenIndex];
+        uint256 curveOut = getCurve(newB);
+
+        if (curveOut != 1) {
+            uint256 newD2 = R.mulUp(C.D2);
+            newBalanceTokenIndex = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(C.A2, B, newD2, tokenIndex);
+        }
+
+        // the curve may have changed, but it's ok, all we need is the new balance.
+        uint256 amountInWithoutFee = newBalanceTokenIndex.sub(B[tokenIndex]);
 
         // First calculate the sum of all token balances, which will be used to calculate
         // the current weight of each token
-        uint256 sumBalances = 0;
-        for (uint256 i = 0; i < balances.length; i++) {
-            sumBalances = sumBalances.add(balances[i]);
+        uint256 sum = 0;
+        for (uint256 i = 0; i < B.length; i++) {
+            sum = sum.add(B[i]);
         }
 
         // We can now compute how much extra balance is being deposited and used in virtual swaps, and charge swap fees
         // accordingly.
-        uint256 currentWeight = balances[tokenIndex].divDown(sumBalances);
-        uint256 taxablePercentage = currentWeight.complement();
+        uint256 w = B[tokenIndex].divDown(sum);
+        uint256 taxablePercentage = w.complement();
         uint256 taxableAmount = amountInWithoutFee.mulUp(taxablePercentage);
         uint256 nonTaxableAmount = amountInWithoutFee.sub(taxableAmount);
 
         // No need to use checked arithmetic for the swap fee, it is guaranteed to be lower than 50%
-        return nonTaxableAmount.add(taxableAmount.divUp(FixedPoint.ONE - swapFeePercentage));
+        return nonTaxableAmount.add(taxableAmount.divUp(FixedPoint.ONE - fee));
     }
 
-    /*
-    Flow of calculations:
-    amountsTokenOut -> amountsOutProportional ->
-    amountOutPercentageExcess -> amountOutBeforeFee -> newInvariant -> amountBPTIn
-    */
-    function _calcBptInGivenExactTokensOut(
-        uint256 amp1,
-        uint256 amp2,
-        uint256[] memory balances,
-        uint256[] memory amountsOut,
-        uint256 bptTotalSupply,
-        uint256 currentInvariant,
-        uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    // REBALANCE - REDEEM/BURN
+
+
+    // Flow of calculations:
+    // amountsTokenOut -> amountsOutProportional ->
+    // amountOutPercentageExcess -> amountOutBeforeFee -> newInvariant -> amountBPTIn
+    // A1, A2, D1, D2 - current curves
+    // B - token balances
+    // dB - exact token balances to subtract (out)
+    // Qbpt - total supply of BPT
+    // fee - swap fee percentage
+
+    function calcBptInGivenExactTokensOut(
+        Curve memory C, uint256[] memory B, uint256[] memory dB, uint256 Qbpt, uint256 fee
+    ) internal view returns (uint256) {
         // BPT in, so we round up overall.
 
         // First loop calculates the sum of all token balances, which will be used to calculate
         // the current weights of each token relative to this sum
-        uint256 sumBalances = 0;
-        for (uint256 i = 0; i < balances.length; i++) {
-            sumBalances = sumBalances.add(balances[i]);
+        uint256 sum = 0;
+        for (uint256 i = 0; i < B.length; i++) {
+            sum = sum.add(B[i]);
         }
 
         // Calculate the weighted balance ratio without considering fees
-        uint256[] memory balanceRatiosWithoutFee = new uint256[](amountsOut.length);
-        uint256 invariantRatioWithoutFees = 0;
-        for (uint256 i = 0; i < balances.length; i++) {
-            uint256 currentWeight = balances[i].divUp(sumBalances);
-            balanceRatiosWithoutFee[i] = balances[i].sub(amountsOut[i]).divUp(balances[i]);
-            invariantRatioWithoutFees = invariantRatioWithoutFees.add(balanceRatiosWithoutFee[i].mulUp(currentWeight));
+        uint256[] memory R = new uint256[](dB.length);
+        // The weighted sum of token balance ratios without considering fees
+        uint256 Rw = 0;
+        for (uint256 i = 0; i < B.length; i++) {
+            // current weight
+            uint256 Wc = B[i].divUp(sum);
+            R[i] = B[i].sub(dB[i]).divUp(B[i]);
+            Rw = Rw.add(R[i].mulUp(Wc));
         }
 
         // Second loop calculates new amounts in, taking into account the fee on the percentage excess
-        uint256[] memory newBalances = new uint256[](balances.length);
-        for (uint256 i = 0; i < balances.length; i++) {
+        // Ba - balance after the rebalance
+        uint256[] memory Ba = new uint256[](B.length);
+        for (uint256 i = 0; i < B.length; i++) {
             // Swap fees are typically charged on 'token in', but there is no 'token in' here, so we apply it to
             // 'token out'. This results in slightly larger price impact.
-
-            uint256 amountOutWithFee;
-            if (invariantRatioWithoutFees > balanceRatiosWithoutFee[i]) {
-                uint256 nonTaxableAmount = balances[i].mulDown(invariantRatioWithoutFees.complement());
-                uint256 taxableAmount = amountsOut[i].sub(nonTaxableAmount);
+            // amount out with fee
+            uint256 dBi;
+            if (Rw > R[i]) {
+                // tax-free portions
+                uint256 dBf = B[i].mulDown(Rw.complement());
+                // taxable portion
+                uint256 dBt = dB[i].sub(dBf);
                 // No need to use checked arithmetic for the swap fee, it is guaranteed to be lower than 50%
-                amountOutWithFee = nonTaxableAmount.add(taxableAmount.divUp(FixedPoint.ONE - swapFeePercentage));
+                dBi = dBf.add(dBt.divUp(FixedPoint.ONE - fee));
             } else {
-                amountOutWithFee = amountsOut[i];
+                dBi = dB[i];
             }
 
-            newBalances[i] = balances[i].sub(amountOutWithFee);
+            Ba[i] = B[i].sub(dBi);
         }
 
-        uint256 newInvariant = _calculateInvariant(amp1, amp2, newBalances);
-        uint256 invariantRatio = newInvariant.divDown(currentInvariant);
+        // which curve are we on?
+        uint256 curve = getCurve(Ba);
+        // what is the new invariant for the curve
+        uint256 Dc = calculateInvariant(C.A1, C.A2, Ba, curve);
+
+        // how much did the invariant grow?
+        // we both invariants before this rebalance - they should correspond to Bb & A1/A2.
+        uint256 Rinv;
+        if (curve == 1) {
+            Rinv = Dc.divDown(C.D1);
+        } else {
+            Rinv = Dc.divDown(C.D2);
+        }
 
         // return amountBPTIn
-        return bptTotalSupply.mulUp(invariantRatio.complement());
+        return Qbpt.mulUp(Rinv.complement());
+
     }
 
-    function _calcTokenOutGivenExactBptIn(
-        uint256 amp1,
-        uint256 amp2,
-        uint256[] memory balances,
-        uint256 tokenIndex,
-        uint256 bptAmountIn,
-        uint256 bptTotalSupply,
-        uint256 currentInvariant,
-        uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    // A1, A2, D1, D2 - current curves
+    // B - token balances
+    // Qbpt - total supply of BPT
+    // dQbpt - exact quantity of BPT in
+    // fee - swap fee percentage
+
+    function calcTokenOutGivenExactBptIn(
+        Curve memory C, uint256[] memory B, uint256 tokenIndex, uint256 dQbpt, uint256 Qbpt, uint256 fee
+    ) internal view returns (uint256) {
         // Token out, so we round down overall.
 
-        uint256 newInvariant = bptTotalSupply.sub(bptAmountIn).divUp(bptTotalSupply).mulUp(currentInvariant);
+        // uint256 newInvariant = bptTotalSupply.sub(bptAmountIn).divUp(bptTotalSupply).mulUp(currentInvariant);
+
+        uint256 R = Qbpt.sub(dQbpt).divUp(Qbpt);
+        uint256 D1 = R.mulUp(C.D1);
 
         // Calculate amount out without fee
-        uint256 newBalanceTokenIndex = _getTokenBalanceGivenInvariantAndAllOtherBalances(
-            amp1,
-            amp2,
-            balances,
-            newInvariant,
-            tokenIndex
-        );
-        uint256 amountOutWithoutFee = balances[tokenIndex].sub(newBalanceTokenIndex);
+        uint256 newBalanceTokenIndex = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(C.A1, B, D1, tokenIndex);
+
+        uint256[] memory newB = new uint256[](2);
+        newB[tokenIndex] = newBalanceTokenIndex;
+        newB[1 - tokenIndex] = B[1 - tokenIndex];
+        uint256 curveOut = getCurve(newB);
+
+        if (curveOut != 1) {
+            uint256 D2 = R.mulUp(C.D2);
+            newBalanceTokenIndex = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(C.A2, B, D2, tokenIndex);
+        }
+
+        uint256 amountOutWithoutFee = B[tokenIndex].sub(newBalanceTokenIndex);
 
         // First calculate the sum of all token balances, which will be used to calculate
         // the current weight of each token
-        uint256 sumBalances = 0;
-        for (uint256 i = 0; i < balances.length; i++) {
-            sumBalances = sumBalances.add(balances[i]);
+        uint256 sum = 0;
+        for (uint256 i = 0; i < B.length; i++) {
+            sum = sum.add(B[i]);
         }
 
         // We can now compute how much excess balance is being withdrawn as a result of the virtual swaps, which result
         // in swap fees.
-        uint256 currentWeight = balances[tokenIndex].divDown(sumBalances);
-        uint256 taxablePercentage = currentWeight.complement();
+        // current weight
+        uint256 Wc = B[tokenIndex].divDown(sum);
+        uint256 taxablePercentage = Wc.complement();
 
         // Swap fees are typically charged on 'token in', but there is no 'token in' here, so we apply it
         // to 'token out'. This results in slightly larger price impact. Fees are rounded up.
@@ -412,76 +519,7 @@ library CustomMath {
         uint256 nonTaxableAmount = amountOutWithoutFee.sub(taxableAmount);
 
         // No need to use checked arithmetic for the swap fee, it is guaranteed to be lower than 50%
-        return nonTaxableAmount.add(taxableAmount.mulDown(FixedPoint.ONE - swapFeePercentage));
-    }
+        return nonTaxableAmount.add(taxableAmount.mulDown(FixedPoint.ONE - fee));
 
-    // This function calculates the balance of a given token (tokenIndex)
-    // given all the other balances and the invariant
-    function _getTokenBalanceGivenInvariantAndAllOtherBalances(
-        uint256 amplificationParameter1,
-        uint256 amplificationParameter2,
-        uint256[] memory balances,
-        uint256 invariant,
-        uint256 tokenIndex
-    ) internal pure returns (uint256) {
-        // Rounds result up overall
-
-        uint256 ampTimesTotal = amplificationParameter1 * balances.length;
-        uint256 sum = balances[0];
-        uint256 P_D = balances[0] * balances.length;
-        for (uint256 j = 1; j < balances.length; j++) {
-            P_D = Math.divDown(Math.mul(Math.mul(P_D, balances[j]), balances.length), invariant);
-            sum = sum.add(balances[j]);
-        }
-        // No need to use safe math, based on the loop above `sum` is greater than or equal to `balances[tokenIndex]`
-        sum = sum - balances[tokenIndex];
-
-        uint256 inv2 = Math.mul(invariant, invariant);
-        // We remove the balance from c by multiplying it
-        uint256 c = Math.mul(
-            Math.mul(Math.divUp(inv2, Math.mul(ampTimesTotal, P_D)), _AMP_PRECISION),
-            balances[tokenIndex]
-        );
-        uint256 b = sum.add(Math.mul(Math.divDown(invariant, ampTimesTotal), _AMP_PRECISION));
-
-        // We iterate to find the balance
-        uint256 prevTokenBalance = 0;
-        // We multiply the first iteration outside the loop with the invariant to set the value of the
-        // initial approximation.
-        uint256 tokenBalance = Math.divUp(inv2.add(c), invariant.add(b));
-
-        for (uint256 i = 0; i < 255; i++) {
-            prevTokenBalance = tokenBalance;
-
-            tokenBalance = Math.divUp(
-                Math.mul(tokenBalance, tokenBalance).add(c),
-                Math.mul(tokenBalance, 2).add(b).sub(invariant)
-            );
-
-            if (tokenBalance > prevTokenBalance) {
-                if (tokenBalance - prevTokenBalance <= 1) {
-                    return tokenBalance;
-                }
-            } else if (prevTokenBalance - tokenBalance <= 1) {
-                return tokenBalance;
-            }
-        }
-
-        // TODO: Add new error code to Errors
-        // _revert(Errors.CUSTOM_GET_BALANCE_DIDNT_CONVERGE);
-        _revert(Errors.STABLE_GET_BALANCE_DIDNT_CONVERGE);
-        return 0;
-    }
-
-    function _getRate(
-        uint256[] memory balances,
-        uint256 amp1,
-        uint256 amp2,
-        uint256 supply
-    ) internal pure returns (uint256) {
-        // When calculating the current BPT rate, we may not have paid the protocol fees, therefore
-        // the invariant should be smaller than its current value. Then, we round down overall.
-        uint256 invariant = _calculateInvariant(amp1, amp2, balances);
-        return invariant.divDown(supply);
     }
 }

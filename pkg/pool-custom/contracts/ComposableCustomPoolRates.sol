@@ -185,9 +185,7 @@ abstract contract ComposableCustomPoolRates is ComposableCustomPoolStorage {
      * @dev Caches the rates of all tokens if necessary
      */
     function _cacheTokenRatesIfNecessary() internal {
-        uint256 totalTokens = _getTotalTokens();
-
-        // The Pool will always have at least 3 tokens so we always try to update these three caches.
+        // The Pool will always have tokens so we always try to update these three caches.
         _cacheTokenRateIfNecessary(0);
         _cacheTokenRateIfNecessary(1);
         _cacheTokenRateIfNecessary(2);

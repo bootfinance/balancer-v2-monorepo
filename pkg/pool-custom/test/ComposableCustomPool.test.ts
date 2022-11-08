@@ -384,8 +384,7 @@ describe('ComposableCustomPool', () => {
           const { value2, isUpdating2, precision2 } = await pool.getAmplificationParameter2();
           const expectedInvariant = calculateInvariant(
             registeredBalances.filter((_, i) => i !== bptIndex),
-            value1.div(precision1),
-            value2.div(precision2)
+            value1.div(precision1)
           );
 
           const {

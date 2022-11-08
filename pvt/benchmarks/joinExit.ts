@@ -138,7 +138,7 @@ async function main() {
   // Custom have a max of 5
   for (let numTokens = 2; numTokens <= 4; numTokens += 2) {
     printTokens('Custom pool', numTokens);
-    await joinAndExitCustomPool(() => getSCustomPool(vault, tokens, numTokens), false);
+    await joinAndExitCustomPool(() => getCustomPool(vault, tokens, numTokens), false);
   }
   console.log('\n');
 
