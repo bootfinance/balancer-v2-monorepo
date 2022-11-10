@@ -29,9 +29,8 @@ contract MockCustomMath {
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
         uint256 tokenAmountIn
-    ) external view returns (uint256, uint256) {
-        return
-        CustomMath.calcOutGivenIn(
+    ) external view returns (uint256) {
+        (,uint256 v) = CustomMath.calcOutGivenIn(
             amp1,
             amp2,
             balances,
@@ -39,6 +38,7 @@ contract MockCustomMath {
             tokenIndexOut,
             tokenAmountIn
         );
+        return v;
     }
 
     function inGivenOut(
@@ -48,8 +48,8 @@ contract MockCustomMath {
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
         uint256 tokenAmountOut
-    ) external view returns (uint256, uint256) {
-        return
+    ) external view returns (uint256) {
+        (,uint256 v) =
         CustomMath.calcInGivenOut(
             amp1,
             amp2,
@@ -58,6 +58,7 @@ contract MockCustomMath {
             tokenIndexOut,
             tokenAmountOut
         );
+        return v;
     }
 
     function exactTokensInForBPTOut(
@@ -111,7 +112,6 @@ contract MockCustomMath {
         uint256 tokenIndex,
         uint256 bptAmountIn,
         uint256 bptTotalSupply,
-        uint256 currentInvariant,
         uint256 swapFee
     ) external view returns (uint256) {
         return

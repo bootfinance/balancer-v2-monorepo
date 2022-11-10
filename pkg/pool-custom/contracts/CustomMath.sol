@@ -183,41 +183,41 @@ library CustomMath {
         Ba[tokenIndexIn] = B[tokenIndexIn].add(tokenAmountIn);
         Ba[tokenIndexOut] = B[tokenIndexOut];
 
+        console.log("calcOutGivenIn", tokenIndexIn, tokenIndexOut, tokenAmountIn);
+        console.log("B[0] =", B[0], "B[1] =", B[1]);
+        console.log("Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+        console.log("Cin=", curveIn);
+
         if (curveIn == 1) {
             uint256 D1 = StableMath.__calculateInvariant(A1, B);
             Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexOut);
-
-            if (Ba[0] <= Ba[1]) {
-                // we are on curve 1 so we are okay
-                curveOut = 1;
-            } else {
+            curveOut = getCurve(Ba);
+            if (curveOut == 2) {
                 // we are on curve 2, so we should have used A2/D2
                 uint256 [] memory Z = _calcZ(A1, D1);
                 uint256 D2 = StableMath.__calculateInvariant(A2, Z);
                 Ba[tokenIndexIn] = B[tokenIndexIn].add(tokenAmountIn);
                 Ba[tokenIndexOut] = B[tokenIndexOut];
-                // ??
+                console.log("before 2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
                 Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexOut);
-                curveOut = 2;
+                console.log("after  2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
             }
         } else {
             uint256 D2 = StableMath.__calculateInvariant(A2, B);
             Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexOut);
-
-            if (Ba[0] > Ba[1]) {
-                // we are on curve 2 so we are okay
-                curveOut = 2;
-            } else {
+            curveOut = getCurve(Ba);
+            if (curveOut == 1) {
                 // we are on curve 1, so we should have used A1/D1
                 uint256 [] memory Z = _calcZ(A2, D2);
                 uint256 D1 = StableMath.__calculateInvariant(A1, Z);
                 Ba[tokenIndexIn] = B[tokenIndexIn].add(tokenAmountIn);
                 Ba[tokenIndexOut] = B[tokenIndexOut];
+                console.log("before 1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
                 Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexOut);
-                curveOut = 1;
+                console.log("after 1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
             }
         }
-
+        console.log("calcOutGivenIn done", B[tokenIndexOut], Ba[tokenIndexOut]);
         return (curveOut, B[tokenIndexOut].sub(Ba[tokenIndexOut]).sub(1));
 
     }
@@ -233,43 +233,50 @@ library CustomMath {
         Ba[tokenIndexIn] = B[tokenIndexIn];
         Ba[tokenIndexOut] = B[tokenIndexOut].sub(tokenAmountOut);
 
+        console.log("calcInGivenOut", tokenIndexIn, tokenIndexOut, tokenAmountOut);
+        console.log("B[0] =", B[0], "B[1] =", B[1]);
+        console.log("Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+        console.log("Cin=", curveIn);
 
         if (curveIn == 1) {
             uint256 D1 = StableMath.__calculateInvariant(A1, B);
+            console.log("D1=", D1);
             Ba[tokenIndexIn] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexIn);
-
-            if (Ba[0] <= Ba[1]) {
-                // we are on curve 1 so we are okay
-                curveOut = 1;
-            } else {
+            curveOut = getCurve(Ba);
+            console.log("Cout=", curveOut, Ba[0], Ba[1]);
+            if (curveOut == 2) {
                 // we are on curve 2, so we should have used A2/D2
                 uint256 [] memory Z = _calcZ(A1, D1);
+                console.log("Z=", Z[0], Z[1]);
                 uint256 D2 = StableMath.__calculateInvariant(A2, Z);
+                console.log("D2=", D2);
                 Ba[tokenIndexIn] = B[tokenIndexIn];
                 Ba[tokenIndexOut] = B[tokenIndexOut].sub(tokenAmountOut);
-                // ??
+                console.log("before 2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
                 Ba[tokenIndexIn] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexIn);
-                curveOut = 2;
+                console.log("after  2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
             }
         } else {
             uint256 D2 = StableMath.__calculateInvariant(A2, B);
-            Ba[tokenIndexOut] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexIn);
-
-            if (Ba[0] > Ba[1]) {
-                // we are on curve 2 so we are okay
-                curveOut = 2;
-            } else {
+            console.log("D2=", D2);
+            Ba[tokenIndexIn] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A2, Ba, D2, tokenIndexIn);
+            curveOut = getCurve(Ba);
+            console.log("Cout=", curveOut, Ba[0], Ba[1]);
+            if (curveOut == 1) {
                 // we are on curve 1, so we should have used A1/D1
                 uint256 [] memory Z = _calcZ(A2, D2);
+                console.log("Z=", Z[0], Z[1]);
                 uint256 D1 = StableMath.__calculateInvariant(A1, Z);
+                console.log("D1=", D1);
                 Ba[tokenIndexIn] = B[tokenIndexIn];
                 Ba[tokenIndexOut] = B[tokenIndexOut].sub(tokenAmountOut);
+                console.log("before 1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
                 Ba[tokenIndexIn] = StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(A1, Ba, D1, tokenIndexIn);
-                curveOut = 1;
+                console.log("after 1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
             }
         }
-
-        return (curveOut, B[tokenIndexIn].sub(Ba[tokenIndexIn]).add(1));
+        console.log("calcInGivenOut done");
+        return (curveOut, Ba[tokenIndexIn].sub(B[tokenIndexIn]).add(1));
 
     }
 
