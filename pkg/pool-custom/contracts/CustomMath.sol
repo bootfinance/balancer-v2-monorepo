@@ -67,20 +67,9 @@ library CustomMath {
         uint256 D2 = Math.mul(D, D);
         uint256 D3 = Math.mul(D, D2);
         uint256 a = A * 2;
-
-        uint256 b = D.sub(
-            Math.mul(
-                Math.divUp(D, Math.mul(2, a)),
-                _AMP_PRECISION
-            )
-        );
-
-        uint256 c = Math.mul(
-            Math.divUp(D3, Math.mul(8, a)),
-            _AMP_PRECISION
-        );
-
-        uint256 Z = Math.divUp(b.add(Math.divUp(c, D2)), 2);
+        uint256 b = D.sub(Math.divDown(Math.mul(D, _AMP_PRECISION), Math.mul(2, a)));
+        uint256 c = Math.divDown(Math.mul(D3, _AMP_PRECISION), Math.mul(8, a));
+        uint256 Z = Math.divDown(b.add(Math.divDown(c, D2)), 2);
 
         uint256 Zp = 0;
 
@@ -88,23 +77,21 @@ library CustomMath {
 
             Zp = Z;
 
-            Z = Math.divUp(b.add(Math.divUp(c, Math.mul(Z, Z))), 2);
+            Z = Math.divDown(b.add(Math.divDown(c, Math.mul(Z, Z))), 2);
 
             if (Z > Zp) {
                 if (Z - Zp <= 1) {
                     ZZ = new uint256[](2);
                     ZZ[0] = Z;
                     ZZ[1] = Z;
-                    console.log("sol: calcZ A, D Z i");
-                    console.log(i, A, D, Z);
+                    console.log("sl: z converged in i, Z", i, Z);
                     return ZZ;
                 }
             } else if (Zp - Z <= 1) {
                 ZZ = new uint256[](2);
                 ZZ[0] = Z;
                 ZZ[1] = Z;
-                console.log("sol: calcZ i, A, D Z");
-                console.log(i, A, D, Z);
+                console.log("sl: z converged in i, Z", i, Z);
                 return ZZ;
             }
         }
@@ -123,10 +110,6 @@ library CustomMath {
     ) internal view returns (uint256)
     {
 
-        console.log("sol: calculateInvariant");
-        console.log("sol: A1=", A1, "A2=", A2);
-        console.log("sol: B=", B[0], B[1], B.length);
-
         uint256 C = getCurve(B);
 
         if (C == Ct) {
@@ -139,13 +122,15 @@ library CustomMath {
             if (C == 1) {
                 uint256 D1 = StableMath.__calculateInvariant(A1, B);
                 uint256[] memory Z = _calcZ(A1, D1);
-                uint256 DZ = StableMath.__calculateInvariant(A2, Z);
-                // console.log("curve 3 D1", D1, DZ, D1 - DZ);
-                return DZ;
+                // uint256 DZ1 = StableMath.__calculateInvariant(A1, Z);
+                uint256 DZ2 = StableMath.__calculateInvariant(A2, Z);
+                return DZ2;
             } else {
                 uint256 D2 = StableMath.__calculateInvariant(A2, B);
                 uint256[] memory Z = _calcZ(A2, D2);
-                return StableMath.__calculateInvariant(A1, Z);
+                // uint256 DZ2 = StableMath.__calculateInvariant(A2, Z);
+                uint256 DZ1 = StableMath.__calculateInvariant(A1, Z);
+                return DZ1;
             }
         }
 

@@ -657,7 +657,7 @@ ComposableCustomPoolProtocolFees
         uint256 preJoinExitInvariant1;
         uint256 preJoinExitInvariant2;
         // TODO: use same calculateInvariant;
-        if (curve == 0) {
+        if (curve == 1) {
             preJoinExitInvariant1 = (currentA1 == lastC.A1)
             ? oldAmpPreJoinExitInvariant
             : CustomMath.calculateInvariant(currentA1, currentA2, balances, 1);
