@@ -104,9 +104,14 @@ export type ExitQueryResult = {
 };
 
 export type LastJoinExitData = {
-  lastJoinExitAmplification1: BigNumber;
-  lastJoinExitAmplification2: BigNumber;
-  lastPostJoinExitInvariant: BigNumber;
+  // lastJoinExitAmplification1: BigNumber;
+  // lastPostJoinExitInvariant1: BigNumber;
+  // lastJoinExitAmplification2: BigNumber;
+  // lastPostJoinExitInvariant2: BigNumber;
+  A1: BigNumber;
+  D1: BigNumber;
+  A2: BigNumber;
+  D2: BigNumber;
 };
 
 export type PoolQueryResult = JoinQueryResult | ExitQueryResult;

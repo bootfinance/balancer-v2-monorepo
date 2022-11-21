@@ -21,6 +21,7 @@ function _calcZ(
   let Z = b.add(c.div(D2)).div(decimal(2));
 
   for (let i = 0; i < 255; i++) {
+
     Zp = Z;
 
     Z = b.add(c.div(Z.mul(Z))).div(decimal(2));
@@ -112,10 +113,12 @@ export function calculateInvariants(
     if (C == 1) {
       let D1 = calculateApproxInvariant(fpRawBalances, A1);
       let Z = fp(_calcZ(A1, fromFp(D1)));
+      console.log("ts Z =", Z.toString());
       return calculateApproxInvariant([Z, Z], A2);
     } else {
       let D2 = calculateApproxInvariant(fpRawBalances, A2);
       let Z = fp(_calcZ(A2, fromFp(D2)));
+      console.log("ts Z =", Z.toString());
       return calculateApproxInvariant([Z, Z], A1);
     }
   }
