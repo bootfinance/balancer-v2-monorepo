@@ -75,6 +75,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
   function itBehavesAsCustomPoolProtocolFees(numberOfTokens: number): void {
 
+
     describe("growth invariants", () => {
       let pool: Contract, tokens: TokenList;
       let rateProviders: Contract[];
@@ -126,7 +127,6 @@ describe("ComposableCustomPoolProtocolFees", () => {
             ]
           });
         });
-
         sharedBeforeEach("update rate cache", async () => {
           // We set new rates for all providers, and then force a cache update for all of them, updating the current
           // rates. They will now be different from the old rates.
@@ -193,7 +193,6 @@ describe("ComposableCustomPoolProtocolFees", () => {
       }
 
 
-      /*
       context("with no tokens exempt from yield fees", () => {
 
         deployPool(Exemption.NONE);
@@ -219,7 +218,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
           });
         }
       });
-      */
+
 
       context("with all tokens exempt from yield fees", () => {
         deployPool(Exemption.ALL);
@@ -246,8 +245,8 @@ describe("ComposableCustomPoolProtocolFees", () => {
       });
 
 
-      /*
       context("with some (but not all) tokens exempt from yield fees", () => {
+
         deployPool(Exemption.SOME);
 
         itComputesTheInvariantsCorrectly();
@@ -270,11 +269,9 @@ describe("ComposableCustomPoolProtocolFees", () => {
           expect(totalGrowthInvariant).to.gt(totalNonExemptGrowthInvariant);
         });
       });
-      */
+
     });
 
-
-    /*
     describe("protocol fees on join/exit", () => {
       // We want relatively large values to make the fees much larger than rounding error
       const SWAP_PROTOCOL_FEE_PERCENTAGE = fp(0.5);
@@ -339,19 +336,21 @@ describe("ComposableCustomPoolProtocolFees", () => {
       });
 
       let preBalances: BigNumber[];
-      let preInvariant: BigNumber;
+      let preInvariant1: BigNumber;
+      let preInvariant2: BigNumber;
       let preVirtualSupply: BigNumber;
 
       function setProtocolFees(swapFee: BigNumberish, yieldFee: BigNumberish) {
+
         sharedBeforeEach("set protocol fees", async () => {
           await feesProvider.connect(admin).setFeeTypePercentage(ProtocolFee.SWAP, swapFee);
           await feesProvider.connect(admin).setFeeTypePercentage(ProtocolFee.YIELD, yieldFee);
-
           await pool.updateProtocolFeePercentageCache();
         });
       }
 
       sharedBeforeEach("setup previous pool state", async () => {
+
         // Since we're passing the balances directly to the contract, we don't need to worry about scaling factors, and
         // can work with 18 decimal balances directly.
         preBalances = tokens.map(() => fp(random(MIN_POOL_TOKEN_BALANCE, MAX_POOL_TOKEN_BALANCE)));
@@ -359,20 +358,27 @@ describe("ComposableCustomPoolProtocolFees", () => {
         // The rate providers start with a value of 1, so we don't need to account for them here. We need to use the
         // actual Solidity math since even small errors will disrupt tests that check for perfect invariant equality
         // (which result in no fees being paid).
-        preInvariant = await math.invariant(AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, preBalances);
+
+        preInvariant1 = await math.invariant(AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, preBalances, 1);
+
+        preInvariant2 = await math.invariant(AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, preBalances, 2);
 
         // The virtual supply is some factor of the invariant
-        preVirtualSupply = preInvariant.mul(fp(random(1.5, 10))).div(FP_SCALING_FACTOR);
+        preVirtualSupply = preInvariant1.mul(fp(random(1.5, 10))).div(FP_SCALING_FACTOR);
 
         // We don't use the stored amplification factor and invariant as the lastJoinExit values in tests as we pass
         // them in. However this function also sets the old token rates which we *do* use.
-        await pool.updatePostJoinExit(AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, preInvariant);
+
+        await pool.updatePostJoinExit(AMPLIFICATION_FACTOR1, preInvariant1, AMPLIFICATION_FACTOR2, preInvariant2);
+
       });
 
       describe("payProtocolFeesBeforeJoinExit", () => {
+
         context("when both the protocol swap and yield fee percentages are zero", () => {
           itPaysProtocolFeesGivenGlobalPercentages(bn(0), bn(0));
         });
+
 
         context("when the protocol swap fee percentage is non-zero", () => {
           itPaysProtocolFeesGivenGlobalPercentages(SWAP_PROTOCOL_FEE_PERCENTAGE, bn(0));
@@ -387,6 +393,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
         });
 
         function itPaysProtocolFeesGivenGlobalPercentages(swapFee: BigNumber, yieldFee: BigNumber) {
+
           setProtocolFees(swapFee, yieldFee);
 
           let currentBalances: BigNumber[];
@@ -394,7 +401,6 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
           context("when neither swap nor yield fees are due", () => {
             prepareNoSwapOrYieldFees();
-
             itDoesNotPayAnyProtocolFees();
           });
 
@@ -418,6 +424,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
             }
           });
 
+
           context("when both swap and yield fees are due", () => {
             prepareSwapAndYieldFees();
 
@@ -428,7 +435,9 @@ describe("ComposableCustomPoolProtocolFees", () => {
             }
           });
 
+
           function prepareNoSwapOrYieldFees() {
+
             sharedBeforeEach(async () => {
               currentBalances = preBalances;
               expectedProtocolOwnershipPercentage = 0;
@@ -526,6 +535,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
           }
 
           function itDoesNotPayAnyProtocolFees() {
+
             let currentBalancesWithBpt: BigNumber[];
 
             sharedBeforeEach(async () => {
@@ -534,47 +544,61 @@ describe("ComposableCustomPoolProtocolFees", () => {
             });
 
             it("returns zero protocol ownership percentage", async () => {
-              expect(
-                await pool.getProtocolPoolOwnershipPercentage(currentBalances, AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, preInvariant)
-              ).to.equal(0);
+
+              const pct = await pool.getProtocolPoolOwnershipPercentage(
+                AMPLIFICATION_FACTOR1,
+                preInvariant1,
+                AMPLIFICATION_FACTOR2,
+                preInvariant2,
+                currentBalances);
+              expect(pct).to.equal(0);
             });
+
 
             it("mints no BPT", async () => {
               const tx = await pool.payProtocolFeesBeforeJoinExit(
-                currentBalancesWithBpt,
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
-                preInvariant
+                preInvariant2,
+                currentBalancesWithBpt
               );
               expectEvent.notEmitted(await tx.wait(), "Transfer");
             });
 
+
             it("returns the original virtual supply", async () => {
-              const { virtualSupply: updatedVirtualSupply } = await pool.callStatic.payProtocolFeesBeforeJoinExit(
-                currentBalancesWithBpt,
+              const { virtualSupply } = await pool.callStatic.payProtocolFeesBeforeJoinExit(
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
-                preInvariant
+                preInvariant2,
+                currentBalancesWithBpt
               );
-              expect(updatedVirtualSupply).to.be.equal(preVirtualSupply);
+
+              expect(virtualSupply).to.be.equal(preVirtualSupply);
             });
 
             it("returns the balances sans BPT", async () => {
               const { balances } = await pool.callStatic.payProtocolFeesBeforeJoinExit(
-                currentBalancesWithBpt,
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
-                preInvariant
+                preInvariant2,
+                currentBalancesWithBpt
               );
+
               expect(balances).to.deep.equal(currentBalances);
             });
+
           }
+
 
           function itPaysTheExpectedProtocolFees() {
             let currentBalancesWithBpt: BigNumber[];
             let expectedBptAmount: BigNumber;
 
-            sharedBeforeEach(async () => {
+            sharedBeforeEach("sharedBeforeEach 3", async () => {
               currentBalancesWithBpt = [...currentBalances];
               currentBalancesWithBpt.splice(bptIndex, 0, PREMINTED_BPT.sub(preVirtualSupply));
 
@@ -587,10 +611,11 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
             it("returns a non-zero protocol ownership percentage", async () => {
               const protocolPoolOwnershipPercentage = await pool.getProtocolPoolOwnershipPercentage(
-                currentBalances,
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
-                preInvariant
+                preInvariant2,
+                currentBalances
               );
 
               expect(protocolPoolOwnershipPercentage).to.be.gt(0);
@@ -602,10 +627,11 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
             it("mints BPT to the protocol fee collector", async () => {
               const tx = await pool.payProtocolFeesBeforeJoinExit(
-                currentBalancesWithBpt,
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
-                preInvariant
+                preInvariant2,
+                currentBalancesWithBpt
               );
               const event = expectEvent.inReceipt(await tx.wait(), "Transfer", {
                 from: ZERO_ADDRESS,
@@ -616,10 +642,11 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
             it("returns the updated virtual supply", async () => {
               const { virtualSupply: updatedVirtualSupply } = await pool.callStatic.payProtocolFeesBeforeJoinExit(
-                currentBalancesWithBpt,
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
-                preInvariant
+                preInvariant2,
+                currentBalancesWithBpt
               );
               expect(updatedVirtualSupply).to.be.almostEqual(
                 preVirtualSupply.add(expectedBptAmount),
@@ -629,10 +656,11 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
             it("returns the balances sans BPT", async () => {
               const { balances } = await pool.callStatic.payProtocolFeesBeforeJoinExit(
-                currentBalancesWithBpt,
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
-                preInvariant
+                preInvariant2,
+                currentBalancesWithBpt
               );
               expect(balances).to.deep.equal(currentBalances);
             });
@@ -653,6 +681,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
           itPaysProtocolFeesOnJoinExitSwaps(bn(0));
         });
 
+
         context("when the protocol swap fee percentage is non-zero", () => {
           itPaysProtocolFeesOnJoinExitSwaps(SWAP_PROTOCOL_FEE_PERCENTAGE);
         });
@@ -670,6 +699,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
           setProtocolFees(swapFee, 0);
 
           context("on proportional join", () => {
+
             prepareProportionalJoinOrExit(Operation.JOIN);
 
             itDoesNotPayAnyProtocolFees();
@@ -685,7 +715,10 @@ describe("ComposableCustomPoolProtocolFees", () => {
             itUpdatesThePostJoinExitState();
           });
 
+
           context("on multi-token non-proportional join", () => {
+
+
             prepareMultiTokenNonProportionalJoinOrExit(Operation.JOIN);
 
             if (swapFee.eq(0)) {
@@ -696,6 +729,7 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
             itUpdatesThePostJoinExitState();
           });
+
 
           context("on multi-token non-proportional exit", () => {
             prepareMultiTokenNonProportionalJoinOrExit(Operation.EXIT);
@@ -766,12 +800,14 @@ describe("ComposableCustomPoolProtocolFees", () => {
             it("mints no (or negligible) BPT", async () => {
               const tx = await pool.updateInvariantAfterJoinExit(
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
+                preInvariant2,
                 currentBalances,
-                preInvariant,
                 preVirtualSupply,
                 currentVirtualSupply
               );
+
 
               // If the protocol swap fee percentage is non-zero, we can't quite guarantee that there'll be zero
               // protocol fees since there's some rounding error in the computation of the currentInvariant the Pool
@@ -790,13 +826,18 @@ describe("ComposableCustomPoolProtocolFees", () => {
                   to: feesCollector.address
                 });
 
+
                 const bptAmount = event.args.value;
+
 
                 // The BPT amount to mint is computed as a percentage of the current supply. This is done with precision
                 // of up to 18 decimal places, so any error below that is always considered negligible. We test for
                 // precision of up to 17 decimal places to give some leeway and account for e.g. different rounding
                 // directions, etc.
+
                 expect(bptAmount).to.be.lte(currentVirtualSupply.div(bn(1e17)));
+
+
               }
             });
           }
@@ -815,12 +856,12 @@ describe("ComposableCustomPoolProtocolFees", () => {
             it("mints BPT to the protocol fee collector", async () => {
               const tx = await pool.updateInvariantAfterJoinExit(
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
+                preInvariant2,
                 currentBalances,
-                preInvariant,
                 preVirtualSupply,
-                currentVirtualSupply
-              );
+                currentVirtualSupply);
 
               const event = expectEvent.inReceipt(await tx.wait(), "Transfer", {
                 from: ZERO_ADDRESS,
@@ -833,25 +874,29 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
           function itUpdatesThePostJoinExitState() {
             it("stores the current invariant and amplification factor", async () => {
+
               await pool.updateInvariantAfterJoinExit(
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
+                preInvariant2,
                 currentBalances,
-                preInvariant,
                 preVirtualSupply,
                 currentVirtualSupply
               );
 
               const {
-                lastJoinExitAmplification1,
-                lastJoinExitAmplification2,
-                lastPostJoinExitInvariant
+                A1, D1, A2, D2
               } = await pool.getLastJoinExitData();
 
-              expect(lastJoinExitAmplification1).to.equal(AMPLIFICATION_FACTOR1);
-              expect(lastJoinExitAmplification2).to.equal(AMPLIFICATION_FACTOR2);
-              expect(lastPostJoinExitInvariant).to.almostEqual(
-                await math.invariant(AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, currentBalances),
+              expect(A1).to.equal(AMPLIFICATION_FACTOR1);
+              expect(A2).to.equal(AMPLIFICATION_FACTOR2);
+              expect(D1).to.almostEqual(
+                await math.invariant(AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, currentBalances, 1),
+                0.000001
+              );
+              expect(D2).to.almostEqual(
+                await math.invariant(AMPLIFICATION_FACTOR1, AMPLIFICATION_FACTOR2, currentBalances, 2),
                 0.000001
               );
             });
@@ -864,12 +909,12 @@ describe("ComposableCustomPoolProtocolFees", () => {
 
               await pool.updateInvariantAfterJoinExit(
                 AMPLIFICATION_FACTOR1,
+                preInvariant1,
                 AMPLIFICATION_FACTOR2,
+                preInvariant2,
                 currentBalances,
-                preInvariant,
                 preVirtualSupply,
-                currentVirtualSupply
-              );
+                currentVirtualSupply);
 
               await tokens.asyncEach(async (token) => {
                 const { rate, oldRate } = await pool.getTokenRateCache(token.address);
@@ -879,7 +924,10 @@ describe("ComposableCustomPoolProtocolFees", () => {
           }
         }
       });
+
+
     });
-    */
+
+
   }
 });

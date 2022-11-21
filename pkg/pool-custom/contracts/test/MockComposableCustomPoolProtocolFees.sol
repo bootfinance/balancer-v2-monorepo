@@ -60,17 +60,34 @@ contract MockComposableCustomPoolProtocolFees is ComposableCustomPoolProtocolFee
     }
 
     function payProtocolFeesBeforeJoinExit(
-        uint256[] memory registeredBalances,
-        CustomMath.Curve memory lastJoinExitCurve
-    ) external returns (uint256, uint256[] memory) {
-        (uint256 virtualSupply, uint256[] memory balances,,) = _payProtocolFeesBeforeJoinExit(registeredBalances, lastJoinExitCurve);
+        uint256 lastJEA1,
+        uint256 lastJED1,
+        uint256 lastJEA2,
+        uint256 lastJED2,
+        uint256[] memory registeredBalances
+    ) external returns (uint256 virtualSupply, uint256[] memory balances) {
+        (virtualSupply, balances,,) = _payProtocolFeesBeforeJoinExit(
+            CustomMath.Curve(lastJEA1, lastJED1, lastJEA2, lastJED2),
+            registeredBalances
+        );
         return (virtualSupply, balances);
     }
 
     function updateInvariantAfterJoinExit(
-        CustomMath.Curve memory curve, uint256[] memory balances, uint256 preJoinExitSupply, uint256 postJoinExitSupply
+        uint256 lastJEA1,
+        uint256 lastJED1,
+        uint256 lastJEA2,
+        uint256 lastJED2,
+        uint256[] memory balances,
+        uint256 preJoinExitSupply,
+        uint256 postJoinExitSupply
     ) external {
-        return _updateInvariantAfterJoinExit(curve, balances, preJoinExitSupply, postJoinExitSupply);
+        return _updateInvariantAfterJoinExit(
+            CustomMath.Curve(lastJEA1, lastJED1, lastJEA2, lastJED2),
+            balances,
+            preJoinExitSupply,
+            postJoinExitSupply
+        );
     }
 
     function updatePostJoinExit(
@@ -97,10 +114,18 @@ contract MockComposableCustomPoolProtocolFees is ComposableCustomPoolProtocolFee
     }
 
     function getProtocolPoolOwnershipPercentage(
-        uint256[] memory balances,
-        CustomMath.Curve memory lastJoinExitCurve
+        uint256 lastJEA1,
+        uint256 lastJED1,
+        uint256 lastJEA2,
+        uint256 lastJED2,
+        uint256[] memory balances
     ) external view returns (uint256) {
-        (uint256 percentage,,) = _getProtocolPoolOwnershipPercentage(balances, lastJoinExitCurve);
+
+        (uint256 percentage,,) = _getProtocolPoolOwnershipPercentage(
+            CustomMath.Curve(lastJEA1, lastJED1, lastJEA2, lastJED2),
+            balances
+        );
+
         return percentage;
     }
 

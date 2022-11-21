@@ -63,7 +63,7 @@ ProtocolFeeCache
      * Calculates protocol fee due originating from accumulated swap fees and yield of non-exempt tokens,
      * pays the fee by minting BPT and returns the updated virtual supply and current balances.
      */
-    function _payProtocolFeesBeforeJoinExit(uint256[] memory registeredBalances, CustomMath.Curve memory lastJoinExitCurve)
+    function _payProtocolFeesBeforeJoinExit(CustomMath.Curve memory lastJoinExitCurve, uint256[] memory registeredBalances)
     internal returns (
         uint256,
         uint256[] memory,
@@ -79,7 +79,7 @@ ProtocolFeeCache
         uint256 expectedProtocolOwnershipPercentage,
         uint256 curve,
         uint256 totalGrowthInvariant
-        ) = _getProtocolPoolOwnershipPercentage(balances, lastJoinExitCurve);
+        ) = _getProtocolPoolOwnershipPercentage(lastJoinExitCurve, balances);
 
         // Now that we know what percentage of the Pool's current value the protocol should own, we can compute how
         // much BPT we need to mint to get to this state. Since we're going to mint BPT for the protocol, the value
@@ -101,7 +101,7 @@ ProtocolFeeCache
         return (virtualSupply + protocolFeeAmount, balances, curve, totalGrowthInvariant);
     }
 
-    function _getProtocolPoolOwnershipPercentage(uint256[] memory balances, CustomMath.Curve memory lastJoinExitCurve)
+    function _getProtocolPoolOwnershipPercentage(CustomMath.Curve memory lastJoinExitCurve, uint256[] memory balances)
     internal view returns (uint256, uint256, uint256)
     {
         // We compute three invariants, adjusting the balances of tokens that have rate providers by undoing the current

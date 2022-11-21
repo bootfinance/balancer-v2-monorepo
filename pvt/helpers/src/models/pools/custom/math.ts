@@ -28,11 +28,11 @@ function _calcZ(
 
     if (Z.gt(Zp)) {
       if (fp(Z).sub(fp(Zp)).lte(1)) {
-        console.log("ts: z converges in ", i, "Z=", Z);
+        //console.log("ts: z converges in ", i, "Z=", Z);
         break;
       }
     } else if (fp(Zp).sub(fp(Z)).lte(1)) {
-      console.log("ts: z converges in ", i, "Z=", Z);
+      //console.log("ts: z converges in ", i, "Z=", Z);
       break;
     }
 
@@ -113,12 +113,12 @@ export function calculateInvariants(
     if (C == 1) {
       let D1 = calculateApproxInvariant(fpRawBalances, A1);
       let Z = fp(_calcZ(A1, fromFp(D1)));
-      console.log("ts Z =", Z.toString());
+      //console.log("ts Z =", Z.toString());
       return calculateApproxInvariant([Z, Z], A2);
     } else {
       let D2 = calculateApproxInvariant(fpRawBalances, A2);
       let Z = fp(_calcZ(A2, fromFp(D2)));
-      console.log("ts Z =", Z.toString());
+      //console.log("ts Z =", Z.toString());
       return calculateApproxInvariant([Z, Z], A1);
     }
   }
@@ -169,11 +169,11 @@ export function calculateApproxInvariant(
     // converge with precision of integer 1
     if (inv.gt(prevInv)) {
       if (fp(inv).sub(fp(prevInv)).lte(1)) {
-        console.log("ts: inv converges in ", i, "D=", inv);
+        //console.log("ts: inv converges in ", i, "D=", inv);
         break;
       }
     } else if (fp(prevInv).sub(fp(inv)).lte(1)) {
-      console.log("ts: inv converges in ", i, "D=", inv);
+      //console.log("ts: inv converges in ", i, "D=", inv);
       break;
     }
   }
@@ -224,13 +224,13 @@ export function calcOutGivenIn(
 ): Decimal {
 
   let B = fpBalances.map(fromFp);
-  console.log("calcOutGivenIn B [0]=", B[0], "B [1]=", B[1]);
+  //console.log("calcOutGivenIn B [0]=", B[0], "B [1]=", B[1]);
   let curveIn = getCurve(B);
 
   let Ba: Decimal[] = [new Decimal(0), new Decimal(0)];
   Ba[tokenIndexIn] = B[tokenIndexIn].add(fromFp(fpTokenAmountIn));
   Ba[tokenIndexOut] = B[tokenIndexOut];
-  console.log("calcOutGivenIn Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+  //console.log("calcOutGivenIn Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
 
   let curveOut;
 
@@ -244,9 +244,9 @@ export function calcOutGivenIn(
       let D2 = calculateInvariant([fp(Z), fp(Z)], amplificationParameter2);
       Ba[tokenIndexIn] = B[tokenIndexIn].add(fromFp(fpTokenAmountIn));
       Ba[tokenIndexOut] = B[tokenIndexOut];
-      console.log("before 2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+      //console.log("before 2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
       Ba[tokenIndexOut] = _getTokenBalanceGivenInvariantAndAllOtherBalances(Ba, amplificationParameter2, fromFp(D2), tokenIndexOut);
-      console.log("after  2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+      //console.log("after  2 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
     }
   } else {
     let D2 = calculateInvariant(fpBalances, amplificationParameter2);
@@ -258,12 +258,12 @@ export function calcOutGivenIn(
       let D1 = calculateInvariant([fp(Z), fp(Z)], amplificationParameter1);
       Ba[tokenIndexIn] = B[tokenIndexIn].add(fromFp(fpTokenAmountIn));
       Ba[tokenIndexOut] = B[tokenIndexOut];
-      console.log("before 1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+      //console.log("before 1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
       Ba[tokenIndexOut] = _getTokenBalanceGivenInvariantAndAllOtherBalances(Ba, amplificationParameter1, fromFp(D1), tokenIndexOut);
-      console.log("after  1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+      //console.log("after  1 Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
     }
   }
-  console.log("calcOutGivenIn done:", B[tokenIndexOut], Ba[tokenIndexOut]);
+  //console.log("calcOutGivenIn done:", B[tokenIndexOut], Ba[tokenIndexOut]);
   return toFp(B[tokenIndexOut].sub(Ba[tokenIndexOut]));
 }
 
@@ -282,7 +282,7 @@ export function calcInGivenOut(
   let Ba: Decimal[] = [new Decimal(0), new Decimal(0)];
   Ba[tokenIndexIn] = B[tokenIndexIn];
   Ba[tokenIndexOut] = B[tokenIndexOut].sub(fromFp(fpTokenAmountOut));
-  console.log("calcInGivenOut Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
+  //console.log("calcInGivenOut Ba[0]=", Ba[0], "Ba[1]=", Ba[1]);
 
   let curveOut;
 

@@ -44,14 +44,14 @@ describe("CustomMath", function() {
       const D1e = calculateInvariants(balances, amp1, amp2, 1);
       expectEqualWithError(D1a, D1e, MAX_RELATIVE_ERROR);
 
-      console.log("ts: C1", D1a.toString(), D1e.toString());
+      //console.log("ts: C1", D1a.toString(), D1e.toString());
 
       // actual
       const D2a = await mock.invariant(A1, A2, balances, 2);
       // expected
       const D2e = calculateInvariants(balances, amp1, amp2, 2);
 
-      console.log("ts: C2", D2a.toString(), D2e.toString());
+      //console.log("ts: C2", D2a.toString(), D2e.toString());
 
       expectEqualWithError(D2a, D2e, MAX_RELATIVE_ERROR);
     }
@@ -94,15 +94,15 @@ describe("CustomMath", function() {
       {
         const result = await mock.invariant(amp1.mul(AMP_PRECISION), amp2.mul(AMP_PRECISION), balances, 1);
         const expectedInvariant = calculateInvariants(balances, amp1, amp2, 1);
-        console.log("result1", result.toString());
-        console.log("expect1", expectedInvariant.toString());
+        //console.log("result1", result.toString());
+        //console.log("expect1", expectedInvariant.toString());
         expectEqualWithError(result, expectedInvariant, MAX_RELATIVE_ERROR);
       }
       {
         const result = await mock.invariant(amp1.mul(AMP_PRECISION), amp2.mul(AMP_PRECISION), balances, 2);
         const expectedInvariant = calculateInvariants(balances, amp1, amp2, 2);
-        console.log("result2", result.toString());
-        console.log("expect2", expectedInvariant.toString());
+        //console.log("result2", result.toString());
+        //console.log("expect2", expectedInvariant.toString());
         expectEqualWithError(result, expectedInvariant, MAX_RELATIVE_ERROR);
       }
     });
@@ -233,11 +233,11 @@ describe("CustomMath", function() {
           tokenIndexOut,
           amountIn);
 
-        console.log("result", result.toString());
+        //console.log("result", result.toString());
 
         const expectedAmountOut = calcOutGivenIn(balances, amp1, amp2, tokenIndexIn, tokenIndexOut, amountIn);
 
-        console.log("expected", expectedAmountOut.toString());
+        //console.log("expected", expectedAmountOut.toString());
 
         expectEqualWithError(result, bn(expectedAmountOut.toFixed(0)), MAX_RELATIVE_ERROR);
 
@@ -353,9 +353,9 @@ describe("CustomMath", function() {
         swapFee
       );
 
-      console.log("A1=", amp1, "D1=", currentInvariant1.toString(), "A2=", amp2, "D2=", currentInvariant2.toString());
-      console.log("Actual  =", actualTokenIn.toString());
-      console.log("Expected=", expectedTokenIn.toString());
+      //.log("A1=", amp1, "D1=", currentInvariant1.toString(), "A2=", amp2, "D2=", currentInvariant2.toString());
+      //console.log("Actual  =", actualTokenIn.toString());
+      //console.log("Expected=", expectedTokenIn.toString());
 
       expect(actualTokenIn).gt(0);
 
@@ -386,10 +386,10 @@ describe("CustomMath", function() {
               const D2 = await mock.invariant(A1, A2, balances, 2);
 
 
-              console.log("D1j=", currentInvariant1.toString());
-              console.log("D1s=", D1.toString());
-              console.log("D2j=", currentInvariant2.toString());
-              console.log("D2s=", D2.toString());
+              //console.log("D1j=", currentInvariant1.toString());
+              //console.log("D1s=", D1.toString());
+              //console.log("D2j=", currentInvariant2.toString());
+              //console.log("D2s=", D2.toString());
 
               for (let tokenIndex = 0; tokenIndex < numTokens; tokenIndex++) {
                 await checkTokenInGivenBptOut(

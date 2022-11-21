@@ -646,7 +646,7 @@ ComposableCustomPoolProtocolFees
         uint256[] memory balances,
         uint256 curve,
         uint256 oldAmpPreJoinExitInvariant
-        ) = _payProtocolFeesBeforeJoinExit(registeredBalances, lastC);
+        ) = _payProtocolFeesBeforeJoinExit(lastC, registeredBalances);
 
         // If the amplification factor is the same as it was during the last join/exit then we can reuse the
         // value calculated using the "old" amplification factor. If not, then we have to calculate this now.
