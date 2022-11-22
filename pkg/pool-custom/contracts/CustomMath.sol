@@ -42,7 +42,7 @@ library CustomMath {
         uint256 A1,
         uint256 A2,
         uint256 supply
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         // When calculating the current BPT rate, we may not have paid the protocol fees, therefore
         // the invariant should be smaller than its current value. Then, we round down overall.
         uint256 curve = 1;
@@ -52,7 +52,7 @@ library CustomMath {
 
     function getCurve(
         uint256[] memory B
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         if (B[0] < B[1]) {
             return 1;
         } else {
@@ -62,7 +62,7 @@ library CustomMath {
 
     function _calcZ(
         uint256 A, uint256 D
-    ) internal view returns (uint256[] memory ZZ) {
+    ) internal pure returns (uint256[] memory ZZ) {
 
         // console.log("A", A, "D", D);
 
@@ -113,7 +113,7 @@ library CustomMath {
     // Ct - target curve (1 or 2)
     function calculateInvariant(
         uint256 A1, uint256 A2, uint256[] memory B, uint256 Ct
-    ) internal view returns (uint256)
+    ) internal pure returns (uint256)
     {
 
         uint256 C = getCurve(B);
@@ -154,7 +154,7 @@ library CustomMath {
 
     function calculateInvariants(
         uint256 A1, uint256 A2, uint256[] memory B
-    ) internal view returns (uint256, uint256)
+    ) internal pure returns (uint256, uint256)
     {
         uint256 D1;
         uint256 D2;
@@ -174,7 +174,7 @@ library CustomMath {
     // Bb - balance before the trade
     function calcOutGivenIn(
         uint256 A1, uint256 A2, uint256[] memory B, uint256 tokenIndexIn, uint256 tokenIndexOut, uint256 tokenAmountIn
-    ) internal view returns (uint256, uint256) {
+    ) internal pure returns (uint256, uint256) {
 
         uint256 curveIn = getCurve(B);
         uint256 curveOut;
@@ -225,7 +225,7 @@ library CustomMath {
 
     function calcInGivenOut(
         uint256 A1, uint256 A2, uint256[] memory B, uint256 tokenIndexIn, uint256 tokenIndexOut, uint256 tokenAmountOut
-    ) internal view returns (uint256, uint256) {
+    ) internal pure returns (uint256, uint256) {
 
         uint256 curveIn = getCurve(B);
         uint256 curveOut;
@@ -290,7 +290,7 @@ library CustomMath {
     // Qbpt - total quantity of BPT
     function calcBptOutGivenExactTokensIn(
         Curve memory C, uint256[] memory Bb, uint256[] memory dBb, uint256 Qbpt, uint256 fee
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
 
         // BPT out, so we round down overall.
 
@@ -361,7 +361,7 @@ library CustomMath {
 
     function calcTokenInGivenExactBptOut(
         Curve memory C, uint256[] memory B, uint256 tokenIndex, uint256 dQbpt, uint256 Qbpt, uint256 fee
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         // Token in, so we round up overall.
 
         uint256 R = Qbpt.add(dQbpt).divUp(Qbpt);
@@ -403,7 +403,6 @@ library CustomMath {
 
     // REBALANCE - REDEEM/BURN
 
-
     // Flow of calculations:
     // amountsTokenOut -> amountsOutProportional ->
     // amountOutPercentageExcess -> amountOutBeforeFee -> newInvariant -> amountBPTIn
@@ -415,7 +414,7 @@ library CustomMath {
 
     function calcBptInGivenExactTokensOut(
         Curve memory C, uint256[] memory B, uint256[] memory dB, uint256 Qbpt, uint256 fee
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         // BPT in, so we round up overall.
 
         // First loop calculates the sum of all token balances, which will be used to calculate
@@ -485,7 +484,7 @@ library CustomMath {
 
     function calcTokenOutGivenExactBptIn(
         Curve memory C, uint256[] memory B, uint256 tokenIndex, uint256 dQbpt, uint256 Qbpt, uint256 fee
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         // Token out, so we round down overall.
 
         // uint256 newInvariant = bptTotalSupply.sub(bptAmountIn).divUp(bptTotalSupply).mulUp(currentInvariant);

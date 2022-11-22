@@ -48,8 +48,6 @@ ProtocolFeeCache
     // [ last join-exit amplification  | last post join-exit invariant ]
     // [           23 bits             |            233 bits           ]
 
-    // TODO FIX ME: for custom swap we need two amp factors
-
     bytes32 private _lastJoinExitData1;
     bytes32 private _lastJoinExitData2;
 

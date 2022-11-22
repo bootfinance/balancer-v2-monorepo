@@ -18,7 +18,7 @@ import "../StableMath.sol";
 import "../CustomMath.sol";
 
 contract MockCustomMath {
-    function invariant(uint256 amp1, uint256 amp2, uint256[] memory balances, uint256 curve) external view returns (uint256) {
+    function invariant(uint256 amp1, uint256 amp2, uint256[] memory balances, uint256 curve) external pure returns (uint256) {
         return CustomMath.calculateInvariant(amp1, amp2, balances, curve);
     }
 
@@ -29,7 +29,7 @@ contract MockCustomMath {
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
         uint256 tokenAmountIn
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         (,uint256 v) = CustomMath.calcOutGivenIn(
             amp1,
             amp2,
@@ -48,7 +48,7 @@ contract MockCustomMath {
         uint256 tokenIndexIn,
         uint256 tokenIndexOut,
         uint256 tokenAmountOut
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         (,uint256 v) =
         CustomMath.calcInGivenOut(
             amp1,
@@ -70,7 +70,7 @@ contract MockCustomMath {
         uint256[] memory amountsIn,
         uint256 bptTotalSupply,
         uint256 swapFee
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return
         CustomMath.calcBptOutGivenExactTokensIn(
             CustomMath.Curve(amp1, D1, amp2, D2),
@@ -91,7 +91,7 @@ contract MockCustomMath {
         uint256 bptAmountOut,
         uint256 bptTotalSupply,
         uint256 swapFee
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return
         CustomMath.calcTokenInGivenExactBptOut(
             CustomMath.Curve(amp1, D1, amp2, D2),
@@ -113,7 +113,7 @@ contract MockCustomMath {
         uint256 bptAmountIn,
         uint256 bptTotalSupply,
         uint256 swapFee
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return
         CustomMath.calcTokenOutGivenExactBptIn(
             CustomMath.Curve(amp1, D1, amp2, D2),
@@ -134,7 +134,7 @@ contract MockCustomMath {
         uint256[] memory amountsOut,
         uint256 bptTotalSupply,
         uint256 swapFee
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return
         CustomMath.calcBptInGivenExactTokensOut(
             CustomMath.Curve(amp1, D1, amp2, D2),
@@ -150,7 +150,7 @@ contract MockCustomMath {
         uint256[] memory balances,
         uint256 currentInvariant,
         uint256 tokenIndex
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return
         StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(
             amplificationParameter1,
@@ -165,7 +165,7 @@ contract MockCustomMath {
         uint256 amp1,
         uint256 amp2,
         uint256 supply
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return CustomMath.getRate(balances, amp1, amp2, supply);
     }
 }
