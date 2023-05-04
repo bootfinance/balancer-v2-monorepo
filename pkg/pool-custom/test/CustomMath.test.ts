@@ -1,7 +1,7 @@
-import { Contract } from "ethers";
-import { deploy } from "@balancer-labs/v2-helpers/src/contract";
-import { bn, fp, BigNumber, fromFp } from "@balancer-labs/v2-helpers/src/numbers";
-import { expectEqualWithError } from "@balancer-labs/v2-helpers/src/test/relativeError";
+import { Contract } from 'ethers';
+import { deploy } from '@balancer-labs/v2-helpers/src/contract';
+import { bn, fp, BigNumber, fromFp } from '@balancer-labs/v2-helpers/src/numbers';
+import { expectEqualWithError } from '@balancer-labs/v2-helpers/src/test/relativeError';
 import {
   calculateAnalyticalInvariantForTwoTokens,
   calculateInvariant,
@@ -12,27 +12,32 @@ import {
   calcBptOutGivenExactTokensIn,
   calcTokenInGivenExactBptOut,
   calcBptInGivenExactTokensOut,
-  calcTokenOutGivenExactBptIn
-} from "@balancer-labs/v2-helpers/src/models/pools/custom/math";
-import { random } from "lodash";
-import { expect } from "chai";
+  calcTokenOutGivenExactBptIn,
+} from '@balancer-labs/v2-helpers/src/models/pools/custom/math';
+import { random } from 'lodash';
+import { expect } from 'chai';
 
 const MAX_RELATIVE_ERROR = 0.0001; // Max relative error
 
 // TODO: Test this math by checking extremes values for the amplification field (0 and infinite)
 // to verify that it equals constant sum and constant product (weighted) invariants.
 
-describe("CustomMath", function() {
+describe('CustomMath', function() {
   let mock: Contract;
 
   const AMP_PRECISION = 1e3;
 
   before(async function() {
-    mock = await deploy("MockCustomMath");
+    mock = await deploy('MockCustomMath');
   });
 
 
-  context("invariant", () => {
+  context('test stub', () => {
+
+    },
+  );
+
+  context('invariant', () => {
 
     async function checkInvariant(balances: BigNumber[], amp1: number, amp2: number): Promise<void> {
       const A1 = bn(amp1).mul(AMP_PRECISION);
@@ -86,7 +91,7 @@ describe("CustomMath", function() {
       });
     });
 
-    it("still converges at extreme values", async () => {
+    it('still converges at extreme values', async () => {
       const amp1 = bn(1);
       const amp2 = bn(1);
       const balances = [fp(0.00000001), fp(1200000000)];
@@ -111,14 +116,14 @@ describe("CustomMath", function() {
   });
 
 
-  context("token balance given invariant and other balances", () => {
+  context('token balance given invariant and other balances', () => {
     async function checkTokenBalanceGivenInvariants(
       balances: BigNumber[],
       amp1: number,
       amp2: number,
       invariant1: BigNumber,
       invariant2: BigNumber,
-      tokenIndex: number
+      tokenIndex: number,
     ): Promise<void> {
       const ampParameter1 = bn(amp1).mul(AMP_PRECISION);
       const ampParameter2 = bn(amp2).mul(AMP_PRECISION);
@@ -127,14 +132,14 @@ describe("CustomMath", function() {
           ampParameter1,
           balances,
           invariant1,
-          tokenIndex
+          tokenIndex,
         );
         // Note this function takes the decimal amp (unadjusted)
         const expectedTokenBalance = getTokenBalanceGivenInvariantAndAllOtherBalances(
           amp1,
           balances,
           invariant1,
-          tokenIndex
+          tokenIndex,
         );
         expectEqualWithError(actualTokenBalance, expectedTokenBalance, MAX_RELATIVE_ERROR);
       }
@@ -143,20 +148,20 @@ describe("CustomMath", function() {
           ampParameter2,
           balances,
           invariant2,
-          tokenIndex
+          tokenIndex,
         );
         // Note this function takes the decimal amp (unadjusted)
         const expectedTokenBalance = getTokenBalanceGivenInvariantAndAllOtherBalances(
           amp2,
           balances,
           invariant2,
-          tokenIndex
+          tokenIndex,
         );
         expectEqualWithError(actualTokenBalance, expectedTokenBalance, MAX_RELATIVE_ERROR);
       }
     }
 
-    context("check over a range of inputs", () => {
+    context('check over a range of inputs', () => {
       for (let numTokens = 2; numTokens <= 2; numTokens++) {
         const balances = Array.from({ length: numTokens }, () => random(250, 350)).map(fp);
 
@@ -185,10 +190,11 @@ describe("CustomMath", function() {
   });
 
 
-  context("in given out", () => {
-    context("two tokens", () => {
+  context('in given out', () => {
 
-      it("returns in given out", async () => {
+    context('two tokens', () => {
+
+      it('returns in given out', async () => {
 
         const amp1 = bn(100);
         const amp2 = bn(100);
@@ -215,9 +221,10 @@ describe("CustomMath", function() {
   });
 
 
-  context("out given in", () => {
-    context("two tokens", () => {
-      it("returns out given in", async () => {
+  context('out given in', () => {
+
+    context('two tokens', () => {
+      it('returns out given in', async () => {
         const amp1 = bn(10);
         const amp2 = bn(10);
         const balances = Array.from({ length: 2 }, () => random(10, 12)).map(fp);
@@ -244,11 +251,10 @@ describe("CustomMath", function() {
       });
     });
 
-
   });
 
 
-  context("BPT out given exact tokens in", () => {
+  context('BPT out given exact tokens in', () => {
     const SWAP_FEE = fp(0.022);
 
     async function checkBptOutGivenTokensIn(
@@ -257,7 +263,7 @@ describe("CustomMath", function() {
       balances: BigNumber[],
       amountsIn: BigNumber[],
       bptTotalSupply: BigNumber,
-      swapFee: BigNumber
+      swapFee: BigNumber,
     ): Promise<void> {
       const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
       const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
@@ -272,7 +278,7 @@ describe("CustomMath", function() {
         balances,
         amountsIn,
         bptTotalSupply,
-        swapFee
+        swapFee,
       );
 
       const expectedBptOut = calcBptOutGivenExactTokensIn(
@@ -283,7 +289,7 @@ describe("CustomMath", function() {
         bptTotalSupply,
         currentInvariant1,
         currentInvariant2,
-        swapFee
+        swapFee,
       );
 
       expect(actualBptOut).gt(0);
@@ -292,7 +298,7 @@ describe("CustomMath", function() {
 
     }
 
-    context("check over a range of inputs", () => {
+    context('check over a range of inputs', () => {
       for (let numTokens = 2; numTokens <= 2; numTokens++) {
         const balances = Array.from({ length: numTokens }, () => random(250, 350)).map(fp);
         const totalSupply = balances.reduce((sum, current) => {
@@ -311,7 +317,7 @@ describe("CustomMath", function() {
   });
 
 
-  context("token in given exact BPT out", () => {
+  context('token in given exact BPT out', () => {
     const SWAP_FEE = fp(0.012);
 
     async function checkTokenInGivenBptOut(
@@ -323,7 +329,7 @@ describe("CustomMath", function() {
       bptTotalSupply: BigNumber,
       currentInvariant1: BigNumber,
       currentInvariant2: BigNumber,
-      swapFee: BigNumber
+      swapFee: BigNumber,
     ): Promise<void> {
       const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
       const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
@@ -337,7 +343,7 @@ describe("CustomMath", function() {
         tokenIndex,
         bptAmountOut,
         bptTotalSupply,
-        swapFee
+        swapFee,
       );
 
 
@@ -350,7 +356,7 @@ describe("CustomMath", function() {
         bptTotalSupply,
         currentInvariant1,
         currentInvariant2,
-        swapFee
+        swapFee,
       );
 
       //.log("A1=", amp1, "D1=", currentInvariant1.toString(), "A2=", amp2, "D2=", currentInvariant2.toString());
@@ -363,7 +369,7 @@ describe("CustomMath", function() {
 
     }
 
-    context("check over a range of inputs", () => {
+    context('check over a range of inputs', () => {
       const bptAmountOut = fp(1);
 
       for (let numTokens = 2; numTokens <= 2; numTokens++) {
@@ -401,7 +407,7 @@ describe("CustomMath", function() {
                   totalSupply,
                   currentInvariant1,
                   currentInvariant2,
-                  SWAP_FEE
+                  SWAP_FEE,
                 );
               }
             }
@@ -412,7 +418,7 @@ describe("CustomMath", function() {
   });
 
 
-  context("BPT in given exact tokens out", () => {
+  context('BPT in given exact tokens out', () => {
     const SWAP_FEE = fp(0.038);
 
     async function checkBptInGivenTokensOut(
@@ -423,7 +429,7 @@ describe("CustomMath", function() {
       bptTotalSupply: BigNumber,
       currentInvariant1: BigNumber,
       currentInvariant2: BigNumber,
-      swapFee: BigNumber
+      swapFee: BigNumber,
     ): Promise<void> {
       const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
       const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
@@ -436,7 +442,7 @@ describe("CustomMath", function() {
         balances,
         amountsOut,
         bptTotalSupply,
-        swapFee
+        swapFee,
       );
 
       const expectedBptIn = calcBptInGivenExactTokensOut(
@@ -447,7 +453,7 @@ describe("CustomMath", function() {
         bptTotalSupply,
         currentInvariant1,
         currentInvariant2,
-        swapFee
+        swapFee,
       );
 
       expect(actualBptIn).gt(0);
@@ -456,7 +462,7 @@ describe("CustomMath", function() {
 
     }
 
-    context("check over a range of inputs", () => {
+    context('check over a range of inputs', () => {
       for (let numTokens = 2; numTokens <= 2; numTokens++) {
         const balances = Array.from({ length: numTokens }, () => random(250, 350)).map(fp);
         const totalSupply = balances.reduce((sum, current) => {
@@ -484,7 +490,7 @@ describe("CustomMath", function() {
   });
 
 
-  context("token out given exact BPT in", () => {
+  context('token out given exact BPT in', () => {
     const SWAP_FEE = fp(0.012);
 
     async function checkTokenOutGivenBptIn(
@@ -496,7 +502,7 @@ describe("CustomMath", function() {
       bptTotalSupply: BigNumber,
       currentInvariant1: BigNumber,
       currentInvariant2: BigNumber,
-      swapFee: BigNumber
+      swapFee: BigNumber,
     ): Promise<void> {
       const amp1Parameter = bn(amp1).mul(AMP_PRECISION);
       const amp2Parameter = bn(amp2).mul(AMP_PRECISION);
@@ -510,7 +516,7 @@ describe("CustomMath", function() {
         tokenIndex,
         bptAmountIn,
         bptTotalSupply,
-        swapFee
+        swapFee,
       );
 
       const expectedTokenOut = calcTokenOutGivenExactBptIn(
@@ -522,14 +528,14 @@ describe("CustomMath", function() {
         bptTotalSupply,
         currentInvariant1,
         currentInvariant2,
-        swapFee
+        swapFee,
       );
 
       expect(actualTokenOut).gt(0);
       expectEqualWithError(actualTokenOut, expectedTokenOut, MAX_RELATIVE_ERROR);
     }
 
-    context("check over a range of inputs", () => {
+    context('check over a range of inputs', () => {
       const bptAmountIn = fp(1);
 
       for (let numTokens = 2; numTokens <= 2; numTokens++) {
@@ -555,7 +561,7 @@ describe("CustomMath", function() {
                   totalSupply,
                   currentInvariant1,
                   currentInvariant2,
-                  SWAP_FEE
+                  SWAP_FEE,
                 );
               }
             }

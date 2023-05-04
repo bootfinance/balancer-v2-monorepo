@@ -25,7 +25,7 @@ import "@balancer-labs/v2-solidity-utils/contracts/math/Math.sol";
 library StableMath {
     using FixedPoint for uint256;
 
-    uint256 internal constant _AMP_PRECISION = 1e3;
+    uint256 public constant _AMP_PRECISION = 1e3;
 
     // Note on unchecked arithmetic:
     // This contract performs a large number of additions, subtractions, multiplications and divisions, often inside
@@ -50,8 +50,8 @@ library StableMath {
     // The amplification parameter equals: A n^(n-1)
     // See: https://github.com/curvefi/curve-contract/blob/b0bbf77f8f93c9c5f4e415bce9cd71f0cdee960e/contracts/pool-templates/base/SwapTemplateBase.vy#L206
     // solhint-disable-previous-line max-line-length
-    function    __calculateInvariant(uint256 amplificationParameter, uint256[] memory balances)
-    internal
+    function __calculateInvariant(uint256 amplificationParameter, uint256[] memory balances)
+    public
     pure
     returns (uint256)
     {
@@ -99,7 +99,7 @@ library StableMath {
                     (Math.divDown(Math.mul(ampTimesTotal, sum), _AMP_PRECISION).add(Math.mul(D_P, numTokens))),
                     invariant
                 ),
-            // ((ampTimesTotal - _AMP_PRECISION) * invariant) / _AMP_PRECISION + (numTokens + 1) * D_P
+                // ((ampTimesTotal - _AMP_PRECISION) * invariant) / _AMP_PRECISION + (numTokens + 1) * D_P
                 (
                 Math.divDown(Math.mul((ampTimesTotal - _AMP_PRECISION), invariant), _AMP_PRECISION).add(
                     Math.mul((numTokens + 1), D_P)
@@ -125,7 +125,7 @@ library StableMath {
         uint256[] memory balances,
         uint256 invariant,
         uint256 tokenIndex
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // Rounds result up overall
 
         uint256 ampTimesTotal = amplificationParameter * balances.length;
@@ -176,7 +176,7 @@ library StableMath {
         uint256[] memory balances,
         uint256 amp,
         uint256 supply
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // When calculating the current BPT rate, we may not have paid the protocol fees, therefore
         // the invariant should be smaller than its current value. Then, we round down overall.
         uint256 invariant = __calculateInvariant(amp, balances);
@@ -194,7 +194,7 @@ library StableMath {
         uint256 tokenIndexOut,
         uint256 tokenAmountIn,
         uint256 invariant
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         /**************************************************************************************************************
         // outGivenIn token x for y - polynomial equation to solve                                                   //
         // ay = amount out to calculate                                                                              //
@@ -234,7 +234,7 @@ library StableMath {
         uint256 tokenIndexOut,
         uint256 tokenAmountOut,
         uint256 invariant
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         /**************************************************************************************************************
         // inGivenOut token x for y - polynomial equation to solve                                                   //
         // ax = amount in to calculate                                                                               //
@@ -273,7 +273,7 @@ library StableMath {
         uint256 bptTotalSupply,
         uint256 currentInvariant,
         uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // BPT out, so we round down overall.
 
         // First loop calculates the sum of all token balances, which will be used to calculate
@@ -330,7 +330,7 @@ library StableMath {
         uint256 bptTotalSupply,
         uint256 currentInvariant,
         uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // Token in, so we round up overall.
 
         uint256 newInvariant = bptTotalSupply.add(bptAmountOut).divUp(bptTotalSupply).mulUp(currentInvariant);
@@ -376,7 +376,7 @@ library StableMath {
         uint256 bptTotalSupply,
         uint256 currentInvariant,
         uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // BPT in, so we round up overall.
 
         // First loop calculates the sum of all token balances, which will be used to calculate
@@ -430,7 +430,7 @@ library StableMath {
         uint256 bptTotalSupply,
         uint256 currentInvariant,
         uint256 swapFeePercentage
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // Token out, so we round down overall.
 
         uint256 newInvariant = bptTotalSupply.sub(bptAmountIn).divUp(bptTotalSupply).mulUp(currentInvariant);

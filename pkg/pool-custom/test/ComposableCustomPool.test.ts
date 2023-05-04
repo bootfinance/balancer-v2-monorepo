@@ -153,7 +153,7 @@ describe("ComposableCustomPool", () => {
           expect(poolTokens).to.include(pool.address);
           expect(balances).to.be.zeros;
         });
-
+``
         it("starts with no BPT", async () => {
           expect(await pool.totalSupply()).to.be.equal(0);
         });

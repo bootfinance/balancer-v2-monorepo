@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
+// it under the terms of the GNU General public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
+// GNU General public License for more details.
 
-// You should have received a copy of the GNU General Public License
+// You should have received a copy of the GNU General public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 pragma solidity ^0.7.0;
+pragma experimental ABIEncoderV2;
 
-import "@balancer-labs/v2-solidity-utils/contracts/math/FixedPoint.sol";
-import "@balancer-labs/v2-solidity-utils/contracts/math/Math.sol";
 import "./StableMath.sol";
 import "hardhat/console.sol";
 
@@ -25,10 +24,10 @@ library CustomMath {
 
     using FixedPoint for uint256;
 
-    uint256 internal constant _MIN_AMP = 1;
-    uint256 internal constant _MAX_AMP = 5000;
-    uint256 internal constant _AMP_PRECISION = 1e3;
-    uint256 internal constant _MAX_CUSTOM_TOKENS = 2;
+    uint256 public constant _MIN_AMP = 1;
+    uint256 public constant _MAX_AMP = 5000;
+    uint256 public constant _AMP_PRECISION = 1e3;
+    uint256 public constant _MAX_CUSTOM_TOKENS = 2;
 
     struct Curve {
         uint256 A1;
@@ -42,7 +41,7 @@ library CustomMath {
         uint256 A1,
         uint256 A2,
         uint256 supply
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // When calculating the current BPT rate, we may not have paid the protocol fees, therefore
         // the invariant should be smaller than its current value. Then, we round down overall.
         uint256 curve = 1;
@@ -50,9 +49,7 @@ library CustomMath {
         return D1.divDown(supply);
     }
 
-    function getCurve(
-        uint256[] memory B
-    ) internal pure returns (uint256) {
+    function getCurve(uint256[] memory B) public pure returns (uint256) {
         if (B[0] < B[1]) {
             return 1;
         } else {
@@ -60,9 +57,7 @@ library CustomMath {
         }
     }
 
-    function _calcZ(
-        uint256 A, uint256 D
-    ) internal pure returns (uint256[] memory ZZ) {
+    function _calcZ(uint256 A, uint256 D) private pure returns (uint256[] memory ZZ) {
 
         // console.log("A", A, "D", D);
 
@@ -111,9 +106,7 @@ library CustomMath {
     // A1, A2 - amplification factors
     // B - token balances
     // Ct - target curve (1 or 2)
-    function calculateInvariant(
-        uint256 A1, uint256 A2, uint256[] memory B, uint256 Ct
-    ) internal pure returns (uint256)
+    function calculateInvariant(uint256 A1, uint256 A2, uint256[] memory B, uint256 Ct) public pure returns (uint256)
     {
 
         uint256 C = getCurve(B);
@@ -152,9 +145,7 @@ library CustomMath {
 
     }
 
-    function calculateInvariants(
-        uint256 A1, uint256 A2, uint256[] memory B
-    ) internal pure returns (uint256, uint256)
+    function calculateInvariants(uint256 A1, uint256 A2, uint256[] memory B) public pure returns (uint256, uint256)
     {
         uint256 D1;
         uint256 D2;
@@ -174,7 +165,7 @@ library CustomMath {
     // Bb - balance before the trade
     function calcOutGivenIn(
         uint256 A1, uint256 A2, uint256[] memory B, uint256 tokenIndexIn, uint256 tokenIndexOut, uint256 tokenAmountIn
-    ) internal pure returns (uint256, uint256) {
+    ) public pure returns (uint256, uint256) {
 
         uint256 curveIn = getCurve(B);
         uint256 curveOut;
@@ -225,7 +216,7 @@ library CustomMath {
 
     function calcInGivenOut(
         uint256 A1, uint256 A2, uint256[] memory B, uint256 tokenIndexIn, uint256 tokenIndexOut, uint256 tokenAmountOut
-    ) internal pure returns (uint256, uint256) {
+    ) public pure returns (uint256, uint256) {
 
         uint256 curveIn = getCurve(B);
         uint256 curveOut;
@@ -290,7 +281,7 @@ library CustomMath {
     // Qbpt - total quantity of BPT
     function calcBptOutGivenExactTokensIn(
         Curve memory C, uint256[] memory Bb, uint256[] memory dBb, uint256 Qbpt, uint256 fee
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
 
         // BPT out, so we round down overall.
 
@@ -361,7 +352,7 @@ library CustomMath {
 
     function calcTokenInGivenExactBptOut(
         Curve memory C, uint256[] memory B, uint256 tokenIndex, uint256 dQbpt, uint256 Qbpt, uint256 fee
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // Token in, so we round up overall.
 
         uint256 R = Qbpt.add(dQbpt).divUp(Qbpt);
@@ -414,7 +405,7 @@ library CustomMath {
 
     function calcBptInGivenExactTokensOut(
         Curve memory C, uint256[] memory B, uint256[] memory dB, uint256 Qbpt, uint256 fee
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // BPT in, so we round up overall.
 
         // First loop calculates the sum of all token balances, which will be used to calculate
@@ -484,7 +475,7 @@ library CustomMath {
 
     function calcTokenOutGivenExactBptIn(
         Curve memory C, uint256[] memory B, uint256 tokenIndex, uint256 dQbpt, uint256 Qbpt, uint256 fee
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // Token out, so we round down overall.
 
         // uint256 newInvariant = bptTotalSupply.sub(bptAmountIn).divUp(bptTotalSupply).mulUp(currentInvariant);

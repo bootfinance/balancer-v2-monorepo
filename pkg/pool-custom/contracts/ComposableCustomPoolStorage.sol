@@ -13,6 +13,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 pragma solidity ^0.7.0;
+pragma experimental ABIEncoderV2;
 
 import "@balancer-labs/v2-interfaces/contracts/solidity-utils/helpers/BalancerErrors.sol";
 import "@balancer-labs/v2-interfaces/contracts/solidity-utils/openzeppelin/IERC20.sol";
@@ -196,7 +197,10 @@ abstract contract ComposableCustomPoolStorage is BasePool {
         if (token == _token0) return 0;
         if (token == _token1) return 1;
         if (token == _token2) return 2;
-        _revert(Errors.INVALID_TOKEN);
+        else {
+            _revert(Errors.INVALID_TOKEN);
+            return 255;
+        }
     }
 
     function _getScalingFactor0() internal view returns (uint256) {
@@ -247,9 +251,9 @@ abstract contract ComposableCustomPoolStorage is BasePool {
      * current Pool balances (including BPT).
      */
     function _dropBptItemFromBalances(uint256[] memory registeredBalances)
-        internal
-        view
-        returns (uint256, uint256[] memory)
+    internal
+    view
+    returns (uint256, uint256[] memory)
     {
         return (_getVirtualSupply(registeredBalances[getBptIndex()]), _dropBptItem(registeredBalances));
     }
@@ -274,9 +278,9 @@ abstract contract ComposableCustomPoolStorage is BasePool {
      * performs no checks.
      */
     function _addBptItem(uint256[] memory amounts, uint256 bptAmount)
-        internal
-        view
-        returns (uint256[] memory registeredTokenAmounts)
+    internal
+    view
+    returns (uint256[] memory registeredTokenAmounts)
     {
         registeredTokenAmounts = new uint256[](amounts.length + 1);
         for (uint256 i = 0; i < registeredTokenAmounts.length; i++) {
@@ -375,7 +379,7 @@ abstract contract ComposableCustomPoolStorage is BasePool {
         // getPoolTokens will read the number of tokens, their addresses and balances (7 reads).
         // The more tokens the Pool has, the more expensive `getPoolTokens` becomes, while `getPoolTokenInfo`'s gas
         // remains constant.
-        (uint256 cash, uint256 managed, , ) = getVault().getPoolTokenInfo(getPoolId(), IERC20(this));
+        (uint256 cash, uint256 managed, ,) = getVault().getPoolTokenInfo(getPoolId(), IERC20(this));
 
         // Note that unlike all other balances, the Vault's BPT balance does not need scaling as its scaling factor is
         // ONE. This addition cannot overflow due to the Vault's balance limits.

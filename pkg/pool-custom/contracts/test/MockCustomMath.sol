@@ -13,11 +13,17 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 pragma solidity ^0.7.0;
+pragma experimental ABIEncoderV2;
 
 import "../StableMath.sol";
 import "../CustomMath.sol";
 
 contract MockCustomMath {
+
+    constructor(){
+        console.log("MockCustomMath created");
+    }
+
     function invariant(uint256 amp1, uint256 amp2, uint256[] memory balances, uint256 curve) external pure returns (uint256) {
         return CustomMath.calculateInvariant(amp1, amp2, balances, curve);
     }
@@ -71,8 +77,7 @@ contract MockCustomMath {
         uint256 bptTotalSupply,
         uint256 swapFee
     ) external pure returns (uint256) {
-        return
-        CustomMath.calcBptOutGivenExactTokensIn(
+        return CustomMath.calcBptOutGivenExactTokensIn(
             CustomMath.Curve(amp1, D1, amp2, D2),
             balances,
             amountsIn,
@@ -92,8 +97,7 @@ contract MockCustomMath {
         uint256 bptTotalSupply,
         uint256 swapFee
     ) external pure returns (uint256) {
-        return
-        CustomMath.calcTokenInGivenExactBptOut(
+        return CustomMath.calcTokenInGivenExactBptOut(
             CustomMath.Curve(amp1, D1, amp2, D2),
             balances,
             tokenIndex,
@@ -135,8 +139,7 @@ contract MockCustomMath {
         uint256 bptTotalSupply,
         uint256 swapFee
     ) external pure returns (uint256) {
-        return
-        CustomMath.calcBptInGivenExactTokensOut(
+        return CustomMath.calcBptInGivenExactTokensOut(
             CustomMath.Curve(amp1, D1, amp2, D2),
             balances,
             amountsOut,
@@ -151,8 +154,7 @@ contract MockCustomMath {
         uint256 currentInvariant,
         uint256 tokenIndex
     ) external pure returns (uint256) {
-        return
-        StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(
+        return StableMath.__getTokenBalanceGivenInvariantAndAllOtherBalances(
             amplificationParameter1,
             balances,
             currentInvariant,
