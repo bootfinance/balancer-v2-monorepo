@@ -28,9 +28,19 @@ describe('CustomMath', function() {
   const AMP_PRECISION = 1e3;
 
   before(async function() {
-    mock = await deploy('MockCustomMath');
+    let stableMath: Contract = await deploy('StableMath');
+    let customMath: Contract = await deploy('CustomMath', {
+      libraries: {
+        StableMath: stableMath.address,
+      },
+    });
+    mock = await deploy('MockCustomMath', {
+      libraries: {
+        StableMath: stableMath.address,
+        CustomMath: customMath.address,
+      },
+    });
   });
-
 
   context('test stub', () => {
 
@@ -572,7 +582,7 @@ describe('CustomMath', function() {
   });
 
 
-  // TODO: SKIPPING THIS FOR NOW - FIX ME
+// TODO: SKIPPING THIS FOR NOW - FIX ME
 
   /*
   context("get rate", () => {
@@ -604,4 +614,5 @@ describe('CustomMath', function() {
   });
   */
 
-});
+})
+;

@@ -12,12 +12,10 @@ describe('CustomMath', function() {
   const MAX_RELATIVE_ERROR = 0.0001; // Max relative error
 
   let mock: Contract;
-  let stableMath: Contract;
-  let customMath: Contract;
 
   before(async function() {
-    stableMath = await deploy('StableMath');
-    customMath = await deploy('CustomMath', {
+    let stableMath: Contract = await deploy('StableMath');
+    let customMath: Contract = await deploy('CustomMath', {
       libraries: {
         StableMath: stableMath.address,
       },

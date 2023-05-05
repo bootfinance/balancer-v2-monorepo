@@ -26,10 +26,7 @@ import "./CustomMath.sol";
 
 import "hardhat/console.sol";
 
-abstract contract ComposableCustomPoolProtocolFees is
-ComposableCustomPoolStorage,
-ComposableCustomPoolRates,
-ProtocolFeeCache
+abstract contract ComposableCustomPoolProtocolFees is ComposableCustomPoolStorage, ComposableCustomPoolRates, ProtocolFeeCache
 {
     using FixedPoint for uint256;
     using WordCodec for bytes32;

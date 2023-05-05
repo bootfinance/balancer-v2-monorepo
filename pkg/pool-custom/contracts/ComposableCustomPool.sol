@@ -48,12 +48,7 @@ import "./CustomMath.sol";
  * transferred out of the Pool. The Pool's arithmetic behaves as if it didn't exist, and the BPT total supply is not
  * a useful value: we rely on the 'virtual supply' (how much BPT is actually owned outside the Vault) instead.
  */
-contract ComposableCustomPool is
-IRateProvider,
-BaseGeneralPool,
-CustomPoolAmplification,
-ComposableCustomPoolRates,
-ComposableCustomPoolProtocolFees
+contract ComposableCustomPool is IRateProvider, BaseGeneralPool, CustomPoolAmplification, ComposableCustomPoolRates, ComposableCustomPoolProtocolFees
 {
     using FixedPoint for uint256;
     using PriceRateCache for bytes32;
@@ -84,16 +79,16 @@ ComposableCustomPoolProtocolFees
 
     constructor(NewPoolParams memory params)
     BasePool(
-        params.vault,
-        IVault.PoolSpecialization.GENERAL,
-        params.name,
-        params.symbol,
-        _insertSorted(params.tokens, IERC20(this)),
-        new address[](params.tokens.length + 1),
-        params.swapFeePercentage,
-        params.pauseWindowDuration,
-        params.bufferPeriodDuration,
-        params.owner
+    params.vault,
+    IVault.PoolSpecialization.GENERAL,
+    params.name,
+    params.symbol,
+    _insertSorted(params.tokens, IERC20(this)),
+    new address[](params.tokens.length + 1),
+    params.swapFeePercentage,
+    params.pauseWindowDuration,
+    params.bufferPeriodDuration,
+    params.owner
     )
     CustomPoolAmplification(params.amplificationParameter1, params.amplificationParameter2)
     ComposableCustomPoolStorage(_extractStorageParams(params))
@@ -111,9 +106,9 @@ ComposableCustomPoolProtocolFees
     {
         return
         ComposableCustomPoolRates.RatesParams({
-        tokens : params.tokens,
-        rateProviders : params.rateProviders,
-        tokenRateCacheDurations : params.tokenRateCacheDurations
+            tokens: params.tokens,
+            rateProviders: params.rateProviders,
+            tokenRateCacheDurations: params.tokenRateCacheDurations
         });
     }
 
@@ -125,9 +120,9 @@ ComposableCustomPoolProtocolFees
     {
         return
         ComposableCustomPoolStorage.StorageParams({
-        registeredTokens : _insertSorted(params.tokens, IERC20(this)),
-        tokenRateProviders : params.rateProviders,
-        exemptFromYieldProtocolFeeFlags : params.exemptFromYieldProtocolFeeFlags
+            registeredTokens: _insertSorted(params.tokens, IERC20(this)),
+            tokenRateProviders: params.rateProviders,
+            exemptFromYieldProtocolFeeFlags: params.exemptFromYieldProtocolFeeFlags
         });
     }
 
@@ -233,14 +228,27 @@ ComposableCustomPoolProtocolFees
         uint256 registeredIndexIn,
         uint256 registeredIndexOut
     ) internal virtual override returns (uint256) {
-        return
-        _onRegularSwap(OnRegularSwapParams(
-                true, // given in
-                request.amount,
-                registeredBalances,
-                registeredIndexIn,
-                registeredIndexOut)
+
+        // Adjust indices and balances for BPT token
+        uint256[] memory balances = _dropBptItem(registeredBalances);
+        //uint256 indexIn = _skipBptIndex(registeredIndexIn);
+        //uint256 indexOut = _skipBptIndex(registeredIndexOut);
+
+        // current As
+        (uint256 A1,) = _getAmplificationParameter1();
+        (uint256 A2,) = _getAmplificationParameter2();
+
+        (, uint256 quantityOut) = CustomMath.calcOutGivenIn(
+            A1,
+            A2,
+            balances,
+            _skipBptIndex(registeredIndexIn),
+            _skipBptIndex(registeredIndexOut),
+            request.amount
         );
+
+        return quantityOut;
+
     }
 
     /**
@@ -254,46 +262,28 @@ ComposableCustomPoolProtocolFees
         uint256 registeredIndexIn,
         uint256 registeredIndexOut
     ) internal virtual override returns (uint256) {
-        return
-        _onRegularSwap(OnRegularSwapParams(
-                false, // given out
-                request.amount,
-                registeredBalances,
-                registeredIndexIn,
-                registeredIndexOut)
-        );
-    }
 
-    /**
-     * @dev Perform a swap between non-BPT tokens. Scaling and fee adjustments have been performed upstream, so
-     * all we need to do here is calculate the price quote, depending on the direction of the swap.
-     */
-    struct OnRegularSwapParams {
-        bool isGivenIn;
-        uint256 amountGiven;
-        uint256[] registeredBalances;
-        uint256 registeredIndexIn;
-        uint256 registeredIndexOut;
-    }
-
-    function _onRegularSwap(OnRegularSwapParams memory params) private view returns (uint256) {
+        // function _onRegularSwap(OnRegularSwapParams memory params) private view returns (uint256) {
         // Adjust indices and balances for BPT token
-        uint256[] memory balances = _dropBptItem(params.registeredBalances);
-        uint256 indexIn = _skipBptIndex(params.registeredIndexIn);
-        uint256 indexOut = _skipBptIndex(params.registeredIndexOut);
+        uint256[] memory balances = _dropBptItem(registeredBalances);
+        // uint256 indexIn = _skipBptIndex(registeredIndexIn);
+        // uint256 indexOut = _skipBptIndex(registeredIndexOut);
 
         // current As
         (uint256 A1,) = _getAmplificationParameter1();
         (uint256 A2,) = _getAmplificationParameter2();
 
-        uint256 curve;
-        uint256 quantityOut;
-        if (params.isGivenIn) {
-            (curve, quantityOut) = CustomMath.calcOutGivenIn(A1, A2, balances, indexIn, indexOut, params.amountGiven);
-        } else {
-            (curve, quantityOut) = CustomMath.calcInGivenOut(A1, A2, balances, indexIn, indexOut, params.amountGiven);
-        }
+        (, uint256 quantityOut) = CustomMath.calcInGivenOut(
+            A1,
+            A2,
+            balances,
+            _skipBptIndex(registeredIndexIn),
+            _skipBptIndex(registeredIndexOut),
+            request.amount
+        );
+
         return quantityOut;
+
     }
 
     /**
@@ -305,6 +295,7 @@ ComposableCustomPoolProtocolFees
      * At this point, the scaling factors (including rates) have been computed by the base class, but not yet applied
      * to the balances.
      */
+
     function _swapWithBpt(
         SwapRequest memory swapRequest,
         uint256[] memory registeredBalances,
@@ -364,68 +355,74 @@ ComposableCustomPoolProtocolFees
         CustomMath.Curve memory curve,
         uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
-        return isGivenIn
-        ? _joinSwapExactTokenInForBptOut(amount, balances, indexIn, curve, virtualSupply)
-        : _joinSwapExactBptOutForTokenIn(amount, balances, indexIn, curve, virtualSupply);
+
+        if (isGivenIn) {
+
+            // return _joinSwapExactTokenInForBptOut(amount, balances, indexIn, curve, virtualSupply);
+
+            // @dev Since this is a join, we know the tokenOut is BPT. Since it is GivenIn, we know the tokenIn amount,
+            // and must calculate the BPT amount out.
+            // We are moving preminted BPT out of the Vault, which increases the virtual supply.
+
+            //        function _joinSwapExactTokenInForBptOut(
+            //        uint256 amountIn,
+            //        uint256[] memory balances,
+            //        uint256 indexIn,
+            //        CustomMath.Curve memory curve,
+            //        uint256 virtualSupply
+            //        ) internal view returns (uint256, uint256) {
+            // The CustomMath function was created with joins in mind, so it expects a full amounts array. We create an
+            // empty one and only set the amount for the token involved.
+
+            uint256[] memory amountsIn = new uint256[](balances.length);
+            amountsIn[indexIn] = amount;
+
+            uint256 bptOut = CustomMath.calcBptOutGivenExactTokensIn(
+                curve,
+                balances,
+                amountsIn,
+                virtualSupply,
+                getSwapFeePercentage()
+            );
+
+            balances[indexIn] = balances[indexIn].add(amount);
+
+            uint256 postJoinExitSupply = virtualSupply.add(bptOut);
+
+            return (bptOut, postJoinExitSupply);
+
+        } else {
+            // return _joinSwapExactBptOutForTokenIn(amount, balances, indexIn, curve, virtualSupply);
+
+            // @dev Since this is a join, we know the tokenOut is BPT. Since it is GivenOut, we know the BPT amount,
+            // and must calculate the token amount in.
+            // We are moving preminted BPT out of the Vault, which increases the virtual supply.
+
+            //        function _joinSwapExactBptOutForTokenIn(
+            //        uint256 bptOut,
+            //        uint256[] memory balances,
+            //        uint256 indexIn,
+            //        CustomMath.Curve memory curve,
+            //        uint256 virtualSupply
+            //        ) internal view returns (uint256, uint256) {
+
+            uint256 amountIn = CustomMath.calcTokenInGivenExactBptOut(
+                curve,
+                balances,
+                indexIn,
+                amount,
+                virtualSupply,
+                getSwapFeePercentage()
+            );
+
+            balances[indexIn] = balances[indexIn].add(amountIn);
+            uint256 postJoinExitSupply = virtualSupply.add(amount);
+
+            return (amountIn, postJoinExitSupply);
+
+        }
     }
 
-    /**
-     * @dev Since this is a join, we know the tokenOut is BPT. Since it is GivenIn, we know the tokenIn amount,
-     * and must calculate the BPT amount out.
-     * We are moving preminted BPT out of the Vault, which increases the virtual supply.
-     */
-    function _joinSwapExactTokenInForBptOut(
-        uint256 amountIn,
-        uint256[] memory balances,
-        uint256 indexIn,
-        CustomMath.Curve memory curve,
-        uint256 virtualSupply
-    ) internal view returns (uint256, uint256) {
-        // The CustomMath function was created with joins in mind, so it expects a full amounts array. We create an
-        // empty one and only set the amount for the token involved.
-        uint256[] memory amountsIn = new uint256[](balances.length);
-        amountsIn[indexIn] = amountIn;
-
-        uint256 bptOut = CustomMath.calcBptOutGivenExactTokensIn(
-            curve,
-            balances,
-            amountsIn,
-            virtualSupply,
-            getSwapFeePercentage()
-        );
-
-        balances[indexIn] = balances[indexIn].add(amountIn);
-        uint256 postJoinExitSupply = virtualSupply.add(bptOut);
-
-        return (bptOut, postJoinExitSupply);
-    }
-
-    /**
-     * @dev Since this is a join, we know the tokenOut is BPT. Since it is GivenOut, we know the BPT amount,
-     * and must calculate the token amount in.
-     * We are moving preminted BPT out of the Vault, which increases the virtual supply.
-     */
-    function _joinSwapExactBptOutForTokenIn(
-        uint256 bptOut,
-        uint256[] memory balances,
-        uint256 indexIn,
-        CustomMath.Curve memory curve,
-        uint256 virtualSupply
-    ) internal view returns (uint256, uint256) {
-        uint256 amountIn = CustomMath.calcTokenInGivenExactBptOut(
-            curve,
-            balances,
-            indexIn,
-            bptOut,
-            virtualSupply,
-            getSwapFeePercentage()
-        );
-
-        balances[indexIn] = balances[indexIn].add(amountIn);
-        uint256 postJoinExitSupply = virtualSupply.add(bptOut);
-
-        return (amountIn, postJoinExitSupply);
-    }
 
     /**
      * @dev This mutates balances so that they become the post-exitswap balances. The CustomMath interfaces are
@@ -439,63 +436,66 @@ ComposableCustomPoolProtocolFees
         CustomMath.Curve memory curve,
         uint256 virtualSupply
     ) internal view returns (uint256, uint256) {
-        return
-        isGivenIn
-        ? _exitSwapExactBptInForTokenOut(amount, balances, indexOut, curve, virtualSupply)
-        : _exitSwapExactTokenOutForBptIn(amount, balances, indexOut, curve, virtualSupply);
+        if (isGivenIn) {
+            //return _exitSwapExactBptInForTokenOut(amount, balances, indexOut, curve, virtualSupply);
+
+            // @dev Since this is an exit, we know the tokenIn is BPT. Since it is GivenIn, we know the BPT amount,
+            // and must calculate the token amount out.
+            // We are moving BPT out of circulation and into the Vault, which decreases the virtual supply.
+
+            //        function _exitSwapExactBptInForTokenOut(
+            //        uint256 bptAmount,
+            //        uint256[] memory balances,
+            //        uint256 indexOut,
+            //        CustomMath.Curve memory curve,
+            //        uint256 virtualSupply
+            //        ) internal view returns (uint256, uint256) {
+            uint256 amountOut = CustomMath.calcTokenOutGivenExactBptIn(
+                curve,
+                balances,
+                indexOut,
+                amount,
+                virtualSupply,
+                getSwapFeePercentage()
+            );
+
+            balances[indexOut] = balances[indexOut].sub(amountOut);
+            uint256 postJoinExitSupply = virtualSupply.sub(amount);
+
+            return (amountOut, postJoinExitSupply);
+
+        } else {
+            // return _exitSwapExactTokenOutForBptIn(amount, balances, indexOut, curve, virtualSupply);
+
+            // @dev Since this is an exit, we know the tokenIn is BPT. Since it is GivenOut, we know the token amount out,
+            // and must calculate the BPT amount in.
+            // We are moving BPT out of circulation and into the Vault, which decreases the virtual supply.
+
+            //        function _exitSwapExactTokenOutForBptIn(
+            //        uint256 amountOut,
+            //        uint256[] memory balances,
+            //        uint256 indexOut,
+            //        CustomMath.Curve memory curve,
+            //        uint256 virtualSupply
+            //        ) internal view returns (uint256, uint256) {
+            // The CustomMath function was created with exits in mind, so it expects a full amounts array. We create an
+            // empty one and only set the amount for the token involved.
+
+            uint256[] memory amountsOut = new uint256[](balances.length);
+
+            amountsOut[indexOut] = amount;
+
+            uint256 bptAmount = CustomMath.calcBptInGivenExactTokensOut(curve, balances, amountsOut, virtualSupply, getSwapFeePercentage());
+
+            balances[indexOut] = balances[indexOut].sub(amount);
+
+            uint256 postJoinExitSupply = virtualSupply.sub(bptAmount);
+
+            return (bptAmount, postJoinExitSupply);
+
+        }
     }
 
-    /**
-     * @dev Since this is an exit, we know the tokenIn is BPT. Since it is GivenIn, we know the BPT amount,
-     * and must calculate the token amount out.
-     * We are moving BPT out of circulation and into the Vault, which decreases the virtual supply.
-     */
-    function _exitSwapExactBptInForTokenOut(
-        uint256 bptAmount,
-        uint256[] memory balances,
-        uint256 indexOut,
-        CustomMath.Curve memory curve,
-        uint256 virtualSupply
-    ) internal view returns (uint256, uint256) {
-        uint256 amountOut = CustomMath.calcTokenOutGivenExactBptIn(
-            curve,
-            balances,
-            indexOut,
-            bptAmount,
-            virtualSupply,
-            getSwapFeePercentage()
-        );
-
-        balances[indexOut] = balances[indexOut].sub(amountOut);
-        uint256 postJoinExitSupply = virtualSupply.sub(bptAmount);
-
-        return (amountOut, postJoinExitSupply);
-    }
-
-    /**
-     * @dev Since this is an exit, we know the tokenIn is BPT. Since it is GivenOut, we know the token amount out,
-     * and must calculate the BPT amount in.
-     * We are moving BPT out of circulation and into the Vault, which decreases the virtual supply.
-     */
-    function _exitSwapExactTokenOutForBptIn(
-        uint256 amountOut,
-        uint256[] memory balances,
-        uint256 indexOut,
-        CustomMath.Curve memory curve,
-        uint256 virtualSupply
-    ) internal view returns (uint256, uint256) {
-        // The CustomMath function was created with exits in mind, so it expects a full amounts array. We create an
-        // empty one and only set the amount for the token involved.
-        uint256[] memory amountsOut = new uint256[](balances.length);
-        amountsOut[indexOut] = amountOut;
-
-        uint256 bptAmount = CustomMath.calcBptInGivenExactTokensOut(curve, balances, amountsOut, virtualSupply, getSwapFeePercentage());
-
-        balances[indexOut] = balances[indexOut].sub(amountOut);
-        uint256 postJoinExitSupply = virtualSupply.sub(bptAmount);
-
-        return (bptAmount, postJoinExitSupply);
-    }
 
     // Join Hooks
 
@@ -562,7 +562,106 @@ ComposableCustomPoolProtocolFees
         uint256[] memory scalingFactors,
         bytes memory userData
     ) internal override returns (uint256, uint256[] memory) {
-        return _onJoinExitPool(true, registeredBalances, scalingFactors, userData);
+        //return _onJoinExitPool(true, registeredBalances, scalingFactors, userData);
+
+        BeforeJoinExitReturn memory rets = _beforeJoinExit(registeredBalances);
+
+        (uint256 bptAmount, uint256[] memory amountsDelta) = _doJoin(
+            rets.curve,
+            rets.balances,
+            rets.preJoinExitSupply,
+            scalingFactors,
+            userData
+        );
+
+        // Unlike joinswaps, explicit joins do not mutate balances into the post join-exit balances so we must perform
+        // this mutation here.
+        _mutateAmounts(rets.balances, amountsDelta, FixedPoint.add);
+        uint256 postJoinExitSupply = FixedPoint.add(rets.preJoinExitSupply, bptAmount);
+
+        // Pass in the post-join balances to reset the protocol fee basis.
+        // We are minting bptAmount, increasing the total (and virtual) supply post-join
+        _updateInvariantAfterJoinExit(
+            rets.curve,
+            rets.balances,
+            rets.preJoinExitSupply,
+            postJoinExitSupply
+        );
+
+        // For clarity and simplicity, arrays used and computed in lower level functions do not include BPT.
+        // But the amountsIn array passed back to the Vault must include BPT, so we add it back in here.
+        return (bptAmount, _addBptItem(amountsDelta, 0));
+
+    }
+
+    /**
+     * @dev Support single- and multi-token joins, but not explicit proportional joins.
+     */
+
+    function _doJoin(
+        CustomMath.Curve memory curve,
+        uint256[] memory balances,
+        uint256 preJoinExitSupply,
+        uint256[] memory scalingFactors,
+        bytes memory userData
+    ) internal view returns (uint256, uint256[] memory) {
+        CustomPoolUserData.JoinKind kind = userData.joinKind();
+        if (kind == CustomPoolUserData.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT) {
+
+            // @dev Multi-token join. Joins with proportional amounts will pay no protocol fees.
+
+            (uint256[] memory amountsIn, uint256 minBPTAmountOut) = userData.exactTokensInForBptOut();
+
+            InputHelpers.ensureInputLengthMatch(balances.length, amountsIn.length);
+
+            // The user-provided amountsIn is unscaled, so we address that.
+            _upscaleArray(amountsIn, _dropBptItem(scalingFactors));
+
+            uint256 bptAmountOut = CustomMath.calcBptOutGivenExactTokensIn(
+                curve,
+                balances,
+                amountsIn,
+                preJoinExitSupply, // = virtualSupply,
+                getSwapFeePercentage()
+            );
+
+            _require(bptAmountOut >= minBPTAmountOut, Errors.BPT_OUT_MIN_AMOUNT);
+
+            return (bptAmountOut, amountsIn);
+
+            //return _joinExactTokensInForBPTOut(params, userData);
+
+        } else if (kind == CustomPoolUserData.JoinKind.TOKEN_IN_FOR_EXACT_BPT_OUT) {
+
+            // @dev Single-token join, equivalent to swapping a pool token for BPT.
+
+            // Since this index is sent in from the user, we interpret it as NOT including the BPT token.
+            (uint256 bptAmountOut, uint256 tokenIndex) = userData.tokenInForExactBptOut();
+            // Note that there is no maximum amountIn parameter: this is handled by `IVault.joinPool`.
+
+            // Balances are passed through from the Vault hook, and include BPT
+            _require(tokenIndex < balances.length, Errors.OUT_OF_BOUNDS);
+
+            // We join with a single token, so initialize amountsIn with zeros.
+            uint256[] memory amountsIn = new uint256[](balances.length);
+
+            // And then assign the result to the selected token.
+            amountsIn[tokenIndex] = CustomMath.calcTokenInGivenExactBptOut(
+                curve,
+                balances,
+                tokenIndex,
+                bptAmountOut,
+                preJoinExitSupply, // = virtualSupply,
+                getSwapFeePercentage()
+            );
+
+            return (bptAmountOut, amountsIn);
+
+            //  return _joinTokenInForExactBPTOut(params, userData);
+        } else {
+            _revert(Errors.UNHANDLED_JOIN_KIND);
+            return (0, new uint256[](0));
+        }
     }
 
     /**
@@ -579,39 +678,23 @@ ComposableCustomPoolProtocolFees
         uint256[] memory scalingFactors,
         bytes memory userData
     ) internal override returns (uint256, uint256[] memory) {
-        return _onJoinExitPool(false, registeredBalances, scalingFactors, userData);
-    }
-
-    /**
-     * @dev Pay protocol fees before the operation, and call `_updateInvariantAfterJoinExit` afterward, to establish
-     * the new basis for protocol fees.
-     */
-    function _onJoinExitPool(
-        bool isJoin,
-        uint256[] memory registeredBalances,
-        uint256[] memory scalingFactors,
-        bytes memory userData
-    ) internal returns (uint256, uint256[] memory) {
+        // return _onJoinExitPool(false, registeredBalances, scalingFactors, userData);
+        // @dev Pay protocol fees before the operation, and call `_updateInvariantAfterJoinExit` afterward, to establish
 
         BeforeJoinExitReturn memory rets = _beforeJoinExit(registeredBalances);
 
-        function(DoJoinParams memory, bytes memory) internal view returns (uint256, uint256[] memory) _doJoinOrExit
-        = (isJoin ? _doJoin : _doExit);
-
-        (uint256 bptAmount, uint256[] memory amountsDelta) = _doJoinOrExit(
-            DoJoinParams(
-                rets.curve,
-                rets.balances,
-                rets.preJoinExitSupply,
-                scalingFactors),
+        (uint256 bptAmount, uint256[] memory amountsDelta) = _doExit(
+            rets.curve,
+            rets.balances,
+            rets.preJoinExitSupply,
+            scalingFactors,
             userData
         );
 
         // Unlike joinswaps, explicit joins do not mutate balances into the post join-exit balances so we must perform
         // this mutation here.
-        function(uint256, uint256) internal pure returns (uint256) _addOrSub = isJoin ? FixedPoint.add : FixedPoint.sub;
-        _mutateAmounts(rets.balances, amountsDelta, _addOrSub);
-        uint256 postJoinExitSupply = _addOrSub(rets.preJoinExitSupply, bptAmount);
+        _mutateAmounts(rets.balances, amountsDelta, FixedPoint.sub);
+        uint256 postJoinExitSupply = FixedPoint.sub(rets.preJoinExitSupply, bptAmount);
 
         // Pass in the post-join balances to reset the protocol fee basis.
         // We are minting bptAmount, increasing the total (and virtual) supply post-join
@@ -625,6 +708,77 @@ ComposableCustomPoolProtocolFees
         // For clarity and simplicity, arrays used and computed in lower level functions do not include BPT.
         // But the amountsIn array passed back to the Vault must include BPT, so we add it back in here.
         return (bptAmount, _addBptItem(amountsDelta, 0));
+
+    }
+
+    // Exit Hooks
+
+    /**
+     * @dev Support single- and multi-token exits, but not explicit proportional exits, which are
+     * supported through Recovery Mode.
+     */
+    function _doExit(
+        CustomMath.Curve memory curve,
+        uint256[] memory balances,
+        uint256 preJoinExitSupply,
+        uint256[] memory scalingFactors,
+        bytes memory userData
+    ) internal view returns (uint256, uint256[] memory) {
+        CustomPoolUserData.ExitKind kind = userData.exitKind();
+        if (kind == CustomPoolUserData.ExitKind.BPT_IN_FOR_EXACT_TOKENS_OUT) {
+
+            // @dev Multi-token exit. Proportional exits will pay no protocol fees.
+
+            (uint256[] memory amountsOut, uint256 maxBPTAmountIn) = userData.bptInForExactTokensOut();
+            InputHelpers.ensureInputLengthMatch(amountsOut.length, balances.length);
+
+            // The user-provided amountsIn is unscaled, so we address that.
+            _upscaleArray(amountsOut, _dropBptItem(scalingFactors));
+
+            uint256 bptAmountIn = CustomMath.calcBptInGivenExactTokensOut(
+                curve,
+                balances,
+                amountsOut,
+                preJoinExitSupply, // virtualSupply,
+                getSwapFeePercentage()
+            );
+
+            _require(bptAmountIn <= maxBPTAmountIn, Errors.BPT_IN_MAX_AMOUNT);
+
+            return (bptAmountIn, amountsOut);
+
+            //  return _exitBPTInForExactTokensOut(params, userData);
+        } else if (kind == CustomPoolUserData.ExitKind.EXACT_BPT_IN_FOR_ONE_TOKEN_OUT) {
+
+            // @dev Single-token exit, equivalent to swapping BPT for a pool token.
+
+            // function _exitExactBPTInForTokenOut(DoJoinParams memory params, bytes memory userData) private view returns (uint256, uint256[] memory) {
+            // Since this index is sent in from the user, we interpret it as NOT including the BPT token
+            (uint256 bptAmountIn, uint256 tokenIndex) = userData.exactBptInForTokenOut();
+            // Note that there is no minimum amountOut parameter: this is handled by `IVault.exitPool`.
+
+            _require(tokenIndex < balances.length, Errors.OUT_OF_BOUNDS);
+
+            // We exit in a single token, so initialize amountsOut with zeros
+            uint256[] memory amountsOut = new uint256[](balances.length);
+
+            // And then assign the result to the selected token.
+            amountsOut[tokenIndex] = CustomMath.calcTokenOutGivenExactBptIn(
+                curve,
+                balances,
+                tokenIndex,
+                bptAmountIn,
+                preJoinExitSupply, // = virtualSupply,
+                getSwapFeePercentage()
+            );
+
+            return (bptAmountIn, amountsOut);
+
+            // return _exitExactBPTInForTokenOut(params, userData);
+        } else {
+            _revert(Errors.UNHANDLED_EXIT_KIND);
+            return (0, new uint256[](0));
+        }
     }
 
     /**
@@ -675,157 +829,6 @@ ComposableCustomPoolProtocolFees
             balances,
             CustomMath.Curve(currentA1, preJoinExitInvariant1, currentA2, preJoinExitInvariant2)
         );
-    }
-
-    /**
-     * @dev Support single- and multi-token joins, but not explicit proportional joins.
-     */
-
-    struct DoJoinParams {
-        CustomMath.Curve curve;
-        uint256[] balances;
-        uint256 preJoinExitSupply;
-        uint256[] scalingFactors;
-    }
-
-    function _doJoin(DoJoinParams memory params, bytes memory userData) internal view returns (uint256, uint256[] memory) {
-        CustomPoolUserData.JoinKind kind = userData.joinKind();
-        if (kind == CustomPoolUserData.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT) {
-            return _joinExactTokensInForBPTOut(params, userData);
-        } else if (kind == CustomPoolUserData.JoinKind.TOKEN_IN_FOR_EXACT_BPT_OUT) {
-            return _joinTokenInForExactBPTOut(params, userData);
-        } else {
-            _revert(Errors.UNHANDLED_JOIN_KIND);
-        }
-    }
-
-    /**
-     * @dev Multi-token join. Joins with proportional amounts will pay no protocol fees.
-     */
-
-    function _joinExactTokensInForBPTOut(DoJoinParams memory params, bytes memory userData)
-    private view returns (uint256, uint256[] memory) {
-        (uint256[] memory amountsIn, uint256 minBPTAmountOut) = userData.exactTokensInForBptOut();
-        InputHelpers.ensureInputLengthMatch(params.balances.length, amountsIn.length);
-
-        // The user-provided amountsIn is unscaled, so we address that.
-        _upscaleArray(amountsIn, _dropBptItem(params.scalingFactors));
-
-        uint256 bptAmountOut = CustomMath.calcBptOutGivenExactTokensIn(
-            params.curve,
-            params.balances,
-            amountsIn,
-            params.preJoinExitSupply, // = virtualSupply,
-            getSwapFeePercentage()
-        );
-
-        _require(bptAmountOut >= minBPTAmountOut, Errors.BPT_OUT_MIN_AMOUNT);
-
-        return (bptAmountOut, amountsIn);
-    }
-
-    /**
-     * @dev Single-token join, equivalent to swapping a pool token for BPT.
-     */
-
-    function _joinTokenInForExactBPTOut(DoJoinParams memory params, bytes memory userData)
-    private view returns (uint256, uint256[] memory) {
-        // Since this index is sent in from the user, we interpret it as NOT including the BPT token.
-        (uint256 bptAmountOut, uint256 tokenIndex) = userData.tokenInForExactBptOut();
-        // Note that there is no maximum amountIn parameter: this is handled by `IVault.joinPool`.
-
-        // Balances are passed through from the Vault hook, and include BPT
-        _require(tokenIndex < params.balances.length, Errors.OUT_OF_BOUNDS);
-
-        // We join with a single token, so initialize amountsIn with zeros.
-        uint256[] memory amountsIn = new uint256[](params.balances.length);
-
-        // And then assign the result to the selected token.
-        amountsIn[tokenIndex] = CustomMath.calcTokenInGivenExactBptOut(
-            params.curve,
-            params.balances,
-            tokenIndex,
-            bptAmountOut,
-            params.preJoinExitSupply, // = virtualSupply,
-            getSwapFeePercentage()
-        );
-
-        return (bptAmountOut, amountsIn);
-    }
-
-    // Exit Hooks
-
-    /**
-     * @dev Support single- and multi-token exits, but not explicit proportional exits, which are
-     * supported through Recovery Mode.
-     */
-    function _doExit(DoJoinParams memory params, bytes memory userData) internal view returns (uint256, uint256[] memory) {
-        CustomPoolUserData.ExitKind kind = userData.exitKind();
-        if (kind == CustomPoolUserData.ExitKind.BPT_IN_FOR_EXACT_TOKENS_OUT) {
-            return _exitBPTInForExactTokensOut(params, userData);
-        } else if (kind == CustomPoolUserData.ExitKind.EXACT_BPT_IN_FOR_ONE_TOKEN_OUT) {
-            return _exitExactBPTInForTokenOut(params, userData);
-        } else {
-            _revert(Errors.UNHANDLED_EXIT_KIND);
-        }
-    }
-
-    /**
-     * @dev Multi-token exit. Proportional exits will pay no protocol fees.
-     */
-
-    function _exitBPTInForExactTokensOut(DoJoinParams memory params, bytes memory userData)
-    private view returns (uint256, uint256[] memory) {
-        (uint256[] memory amountsOut, uint256 maxBPTAmountIn) = userData.bptInForExactTokensOut();
-        InputHelpers.ensureInputLengthMatch(amountsOut.length, params.balances.length);
-
-        // The user-provided amountsIn is unscaled, so we address that.
-        _upscaleArray(amountsOut, _dropBptItem(params.scalingFactors));
-
-        uint256 bptAmountIn = CustomMath.calcBptInGivenExactTokensOut(
-            params.curve,
-            params.balances,
-            amountsOut,
-            params.preJoinExitSupply, // virtualSupply,
-            getSwapFeePercentage()
-        );
-        _require(bptAmountIn <= maxBPTAmountIn, Errors.BPT_IN_MAX_AMOUNT);
-
-        return (bptAmountIn, amountsOut);
-    }
-
-    /**
-     * @dev Single-token exit, equivalent to swapping BPT for a pool token.
-     */
-
-    //    params.preJoinExitSupply, virtualSupply
-    //                params.preJoinExitInvariant,
-    //                params.currentAmp1,
-    //                params.currentAmp2,
-    //                params.balances,
-
-    function _exitExactBPTInForTokenOut(DoJoinParams memory params, bytes memory userData)
-    private view returns (uint256, uint256[] memory) {
-        // Since this index is sent in from the user, we interpret it as NOT including the BPT token
-        (uint256 bptAmountIn, uint256 tokenIndex) = userData.exactBptInForTokenOut();
-        // Note that there is no minimum amountOut parameter: this is handled by `IVault.exitPool`.
-
-        _require(tokenIndex < params.balances.length, Errors.OUT_OF_BOUNDS);
-
-        // We exit in a single token, so initialize amountsOut with zeros
-        uint256[] memory amountsOut = new uint256[](params.balances.length);
-
-        // And then assign the result to the selected token.
-        amountsOut[tokenIndex] = CustomMath.calcTokenOutGivenExactBptIn(
-            params.curve,
-            params.balances,
-            tokenIndex,
-            bptAmountIn,
-            params.preJoinExitSupply, // = virtualSupply,
-            getSwapFeePercentage()
-        );
-
-        return (bptAmountIn, amountsOut);
     }
 
     /**

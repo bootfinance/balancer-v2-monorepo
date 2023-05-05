@@ -40,7 +40,12 @@ export default {
     } = params;
 
     const owner = TypesConverter.toAddress(params.owner);
-
+    let stableMath: Contract = await deploy('StableMath');
+    let customMath: Contract = await deploy('CustomMath', {
+      libraries: {
+        StableMath: stableMath.address,
+      },
+    });
     return deploy('v2-pool-custom/MockComposableCustomPool', {
       args: [
         {
@@ -60,6 +65,10 @@ export default {
           owner,
         },
       ],
+      libraries: {
+        StableMath: stableMath.address,
+        CustomMath: customMath.address,
+      },
       from,
     });
   },

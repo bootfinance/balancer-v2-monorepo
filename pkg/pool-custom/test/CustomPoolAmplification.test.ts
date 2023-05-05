@@ -2,6 +2,8 @@ import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { BigNumber, Contract } from 'ethers';
 
+import '@balancer-labs/v2-common/setupTests';
+
 import { sharedBeforeEach } from '@balancer-labs/v2-common/sharedBeforeEach';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
 import { bn } from '@balancer-labs/v2-helpers/src/numbers';
