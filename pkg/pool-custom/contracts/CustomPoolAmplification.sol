@@ -19,7 +19,7 @@ import "@balancer-labs/v2-pool-utils/contracts/BasePoolAuthorization.sol";
 import "@balancer-labs/v2-solidity-utils/contracts/helpers/WordCodec.sol";
 
 import "./CustomMath.sol";
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 abstract contract CustomPoolAmplification is BasePoolAuthorization {
     using WordCodec for bytes32;

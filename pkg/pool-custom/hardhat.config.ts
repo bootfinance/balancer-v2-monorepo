@@ -25,8 +25,9 @@ export default {
   contractSizer: {
     alphaSort: true,
     disambiguatePaths: false,
-    runOnCompile: true,
+    runOnCompile: false,
     strict: false,
+    outputFile: 'sizer.txt',
     // only: [':MockCustomPool$', ':CustomPool$', ':CustomMathCalc$', ':CustomPoolParams$'],
   },
 };

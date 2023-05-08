@@ -19,10 +19,6 @@ import "../CustomMath.sol";
 
 contract MockCustomMath {
 
-    constructor(){
-        console.log("MockCustomMath created");
-    }
-
     function invariant(uint256 amp1, uint256 amp2, uint256[] memory balances, uint256 curve) external pure returns (uint256) {
         return CustomMath.calculateInvariant(amp1, amp2, balances, curve);
     }

@@ -24,7 +24,7 @@ import "./ComposableCustomPoolStorage.sol";
 import "./ComposableCustomPoolRates.sol";
 import "./CustomMath.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 abstract contract ComposableCustomPoolProtocolFees is ComposableCustomPoolStorage, ComposableCustomPoolRates, ProtocolFeeCache
 {

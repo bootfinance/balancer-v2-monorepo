@@ -21,11 +21,11 @@ const contractSettings: ContractSettings = {
   },
   '@balancer-labs/v2-pool-custom/contracts/ComposableCustomPool.sol': {
     version: '0.7.1',
-    runs: 200,
+    runs: 500,
   },
   '@balancer-labs/v2-pool-custom/contracts/test/MockComposableCustomPool.sol': {
     version: '0.7.1',
-    runs: 200,
+    runs: 20,
   },
 };
 
